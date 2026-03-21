@@ -1126,11 +1126,12 @@ client.on(Events.InteractionCreate, async (i) => {
             const maxSlots = parseInt(i.customId.split('_')[2]);
             const selectedPoint = parseInt(i.values[0]);
             
-            const msg = i.message;
+            // ПРИНУДИТЕЛЬНО ОБНОВЛЯЕМ СООБЩЕНИЕ
+            const msg = await i.message.fetch();
             const embed = msg.embeds[0];
             
-            if (!embed || !embed.fields) {
-                return i.reply({ content: '❌ Ошибка: не удалось прочитать данные сбора.', flags: [MessageFlags.Ephemeral] });
+            if (!embed || !embed.fields || embed.fields.length === 0) {
+                return i.reply({ content: '❌ Ошибка: не удалось прочитать данные сбора. Попробуйте еще раз через секунду.', flags: [MessageFlags.Ephemeral] });
             }
 
             const field = embed.fields.find(f => f.name === 'Список участников:');
@@ -1240,7 +1241,10 @@ client.on(Events.InteractionCreate, async (i) => {
 
         if (i.customId.startsWith('btnleave_')) {
             const maxSlots = parseInt(i.customId.split('_')[1]);
-            const embed = i.message.embeds[0];
+            
+            // ОБНОВЛЯЕМ СООБЩЕНИЕ
+            const msg = await i.message.fetch();
+            const embed = msg.embeds[0];
 
             if (!embed || !embed.fields) return i.reply({ content: 'Ошибка данных.', flags: [MessageFlags.Ephemeral] });
 
@@ -1269,7 +1273,7 @@ client.on(Events.InteractionCreate, async (i) => {
             leaveCooldowns.set(i.user.id, Date.now() + 180000);
 
             const newData = createPickEmbed(usersCount, finalUsers, maxSlots, embed.description, label, emoji);
-            await i.message.edit(newData);
+            await msg.edit(newData);
             await i.reply({ content: `Вы успешно покинули слот #${userIndex + 1}. Повторная запись доступна через 3 минуты.`, flags: [MessageFlags.Ephemeral] });
             return;
         } else if (i.customId.startsWith('btnopen_')) {
@@ -1280,7 +1284,10 @@ client.on(Events.InteractionCreate, async (i) => {
             }
 
             const maxSlots = parseInt(i.customId.split('_')[1]);
-            const embed = i.message.embeds[0];
+            
+            // ОБНОВЛЯЕМ СООБЩЕНИЕ
+            const msg = await i.message.fetch();
+            const embed = msg.embeds[0];
             
             if (!embed || !embed.fields) return i.reply({ content: 'Ошибка данных сообщения.', flags: [MessageFlags.Ephemeral] });
 
