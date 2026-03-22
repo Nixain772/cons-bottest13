@@ -249,7 +249,7 @@ const FINKA_CHART_CHANNEL_ID = '1476625883744702694';
 const finkaSchema = new mongoose.Schema({
     configId: { type: String, default: 'global' },
     lastPayMessageId: String,
-    lastPicMessageId: String // Добавлено поле для хранения ID последнего сбора
+    lastPicMessageId: String
 });
 
 const FinkaModel = mongoose.model('FinkaData', finkaSchema);
@@ -643,7 +643,6 @@ client.once(Events.ClientReady, async (c) => {
         if (currentHour === FINKA_TARGET_HOUR && currentMinute === FINKA_TARGET_MINUTE) {
             client.channels.fetch(FINKA_CHART_CHANNEL_ID).then(async ch => {
                 if (ch) {
-                    // Важно: сохраняем ID именно сообщения с КНОПКАМИ
                     const msg = await ch.send({ 
                         content: `<@&${FINKA_MENTION_ROLE_ID}>`, 
                         ...createPickEmbed(0, [], 3, '# 💰 **Сбор на финку**\n\nОткрылась пикалка на вывоз территорий.', 'Занять слот', '💰') 
@@ -1129,11 +1128,13 @@ client.on(Events.InteractionCreate, async (i) => {
 
     if (i.isStringSelectMenu()) {
         if (i.customId.startsWith('sel_pick_')) {
-            const maxSlots = parseInt(i.customId.split('_')[2]);
+            const parts = i.customId.split('_');
+            const maxSlots = parseInt(parts[2]);
+            const targetMsgId = parts[3];
             const selectedPoint = parseInt(i.values[0]);
             
             try {
-                const msg = await i.message.fetch();
+                const msg = await i.channel.messages.fetch(targetMsgId);
                 const embed = msg.embeds[0];
                 
                 if (!embed || !embed.fields || embed.fields.length === 0) {
@@ -1319,7 +1320,7 @@ client.on(Events.InteractionCreate, async (i) => {
                 }
 
                 const select = new StringSelectMenuBuilder()
-                    .setCustomId(`sel_pick_${maxSlots}`)
+                    .setCustomId(`sel_pick_${maxSlots}_${msg.id}`)
                     .setPlaceholder(`Выберите точку (1-${maxSlots})`);
 
                 for (let k = 0; k < maxSlots; k++) {
