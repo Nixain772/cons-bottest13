@@ -1115,7 +1115,7 @@ client.on(Events.InteractionCreate, async (i) => {
                 await msg.edit(newData);
                 await i.reply({ content: `✅ <@${target.id}> удален из сбора.`, flags: [MessageFlags.Ephemeral] });
             } catch (e) {
-                await i.reply({ content: 'Ошибка при обновлении сбора.', flags: [MessageFlags.Ephemeral] });
+                await i.reply({ content: 'Ошибка при обновлении сбора. Возможно, сообщение было удалено.', flags: [MessageFlags.Ephemeral] });
             }
             return;
         }
@@ -1126,40 +1126,44 @@ client.on(Events.InteractionCreate, async (i) => {
             const maxSlots = parseInt(i.customId.split('_')[2]);
             const selectedPoint = parseInt(i.values[0]);
             
-            // ПРИНУДИТЕЛЬНО ОБНОВЛЯЕМ СООБЩЕНИЕ
-            const msg = await i.message.fetch();
-            const embed = msg.embeds[0];
-            
-            if (!embed || !embed.fields || embed.fields.length === 0) {
-                return i.reply({ content: '❌ Ошибка: не удалось прочитать данные сбора. Попробуйте еще раз через секунду.', flags: [MessageFlags.Ephemeral] });
+            try {
+                const msg = await i.message.fetch();
+                const embed = msg.embeds[0];
+                
+                if (!embed || !embed.fields || embed.fields.length === 0) {
+                    return i.reply({ content: '❌ Ошибка: не удалось прочитать данные сбора.', flags: [MessageFlags.Ephemeral] });
+                }
+
+                const field = embed.fields.find(f => f.name === 'Список участников:');
+                if (!field) return i.reply({ content: '❌ Список участников не найден.', flags: [MessageFlags.Ephemeral] });
+
+                let users = field.value.split('\n').map(line => line.replace(/^\d+\.\s*/, ''));
+
+                if (users.some(u => u.includes(i.user.id))) {
+                    return i.reply({ content: '❌ Вы уже заняли слот!', flags: [MessageFlags.Ephemeral] });
+                }
+
+                if (users[selectedPoint] !== 'Свободно') {
+                    return i.reply({ content: '❌ Ой, ты не успел! Это место уже заняли.', flags: [MessageFlags.Ephemeral] });
+                }
+
+                users[selectedPoint] = `<@${i.user.id}>`;
+                const usersCount = users.filter(u => u !== 'Свободно').length;
+
+                let label = 'Пик слота';
+                let emoji = '⛏️';
+                if (embed.description && embed.description.includes('финку')) {
+                    label = 'Занять слот';
+                    emoji = '💰';
+                }
+
+                const newData = createPickEmbed(usersCount, users, maxSlots, embed.description, label, emoji);
+                await msg.edit(newData);
+                await i.reply({ content: `✅ Ты успешно занял точку #${selectedPoint + 1}!`, flags: [MessageFlags.Ephemeral] });
+            } catch (e) {
+                console.error(e);
+                await i.reply({ content: '❌ Ошибка при записи. Возможно, сообщение сбора было удалено.', flags: [MessageFlags.Ephemeral] });
             }
-
-            const field = embed.fields.find(f => f.name === 'Список участников:');
-            if (!field) return i.reply({ content: '❌ Список участников не найден.', flags: [MessageFlags.Ephemeral] });
-
-            let users = field.value.split('\n').map(line => line.replace(/^\d+\.\s*/, ''));
-
-            if (users.some(u => u.includes(i.user.id))) {
-                return i.reply({ content: '❌ Вы уже заняли слот!', flags: [MessageFlags.Ephemeral] });
-            }
-
-            if (users[selectedPoint] !== 'Свободно') {
-                return i.reply({ content: '❌ Ой, ты не успел! Это место уже заняли.', flags: [MessageFlags.Ephemeral] });
-            }
-
-            users[selectedPoint] = `<@${i.user.id}>`;
-            const usersCount = users.filter(u => u !== 'Свободно').length;
-
-            let label = 'Пик слота';
-            let emoji = '⛏️';
-            if (embed.description && embed.description.includes('финку')) {
-                label = 'Занять слот';
-                emoji = '💰';
-            }
-
-            const newData = createPickEmbed(usersCount, users, maxSlots, embed.description, label, emoji);
-            await msg.edit(newData);
-            await i.reply({ content: `✅ Ты успешно занял точку #${selectedPoint + 1}!`, flags: [MessageFlags.Ephemeral] });
             return;
         }
     }
@@ -1242,39 +1246,42 @@ client.on(Events.InteractionCreate, async (i) => {
         if (i.customId.startsWith('btnleave_')) {
             const maxSlots = parseInt(i.customId.split('_')[1]);
             
-            // ОБНОВЛЯЕМ СООБЩЕНИЕ
-            const msg = await i.message.fetch();
-            const embed = msg.embeds[0];
+            try {
+                const msg = await i.message.fetch();
+                const embed = msg.embeds[0];
 
-            if (!embed || !embed.fields) return i.reply({ content: 'Ошибка данных.', flags: [MessageFlags.Ephemeral] });
+                if (!embed || !embed.fields) return i.reply({ content: 'Ошибка данных.', flags: [MessageFlags.Ephemeral] });
 
-            const field = embed.fields.find(f => f.name === 'Список участников:');
-            let users = [];
-            if (field && field.value !== 'Пока никого...') {
-                users = field.value.split('\n').map(line => line.replace(/^\d+\.\s*/, ''));
+                const field = embed.fields.find(f => f.name === 'Список участников:');
+                let users = [];
+                if (field && field.value !== 'Пока никого...') {
+                    users = field.value.split('\n').map(line => line.replace(/^\d+\.\s*/, ''));
+                }
+
+                const userIndex = users.findIndex(line => line.includes(i.user.id));
+                if (userIndex === -1) {
+                    return i.reply({ content: 'Вы не записаны!', flags: [MessageFlags.Ephemeral] });
+                }
+
+                users[userIndex] = 'Свободно';
+                const usersCount = users.filter(u => u !== 'Свободно').length;
+                const finalUsers = usersCount === 0 ? [] : users;
+
+                let label = 'Пик слота';
+                let emoji = '⛏️';
+                if (embed.description && embed.description.includes('финку')) {
+                    label = 'Занять слот';
+                    emoji = '💰';
+                }
+
+                leaveCooldowns.set(i.user.id, Date.now() + 180000);
+
+                const newData = createPickEmbed(usersCount, finalUsers, maxSlots, embed.description, label, emoji);
+                await msg.edit(newData);
+                await i.reply({ content: `Вы успешно покинули слот #${userIndex + 1}. Повторная запись доступна через 3 минуты.`, flags: [MessageFlags.Ephemeral] });
+            } catch (e) {
+                await i.reply({ content: 'Ошибка при выходе. Возможно, сообщение было удалено.', flags: [MessageFlags.Ephemeral] });
             }
-
-            const userIndex = users.findIndex(line => line.includes(i.user.id));
-            if (userIndex === -1) {
-                return i.reply({ content: 'Вы не записаны!', flags: [MessageFlags.Ephemeral] });
-            }
-
-            users[userIndex] = 'Свободно';
-            const usersCount = users.filter(u => u !== 'Свободно').length;
-            const finalUsers = usersCount === 0 ? [] : users;
-
-            let label = 'Пик слота';
-            let emoji = '⛏️';
-            if (embed.description && embed.description.includes('финку')) {
-                label = 'Занять слот';
-                emoji = '💰';
-            }
-
-            leaveCooldowns.set(i.user.id, Date.now() + 180000);
-
-            const newData = createPickEmbed(usersCount, finalUsers, maxSlots, embed.description, label, emoji);
-            await msg.edit(newData);
-            await i.reply({ content: `Вы успешно покинули слот #${userIndex + 1}. Повторная запись доступна через 3 минуты.`, flags: [MessageFlags.Ephemeral] });
             return;
         } else if (i.customId.startsWith('btnopen_')) {
             const cooldown = leaveCooldowns.get(i.user.id);
@@ -1285,42 +1292,45 @@ client.on(Events.InteractionCreate, async (i) => {
 
             const maxSlots = parseInt(i.customId.split('_')[1]);
             
-            // ОБНОВЛЯЕМ СООБЩЕНИЕ
-            const msg = await i.message.fetch();
-            const embed = msg.embeds[0];
-            
-            if (!embed || !embed.fields) return i.reply({ content: 'Ошибка данных сообщения.', flags: [MessageFlags.Ephemeral] });
+            try {
+                const msg = await i.message.fetch();
+                const embed = msg.embeds[0];
+                
+                if (!embed || !embed.fields) return i.reply({ content: 'Ошибка данных сообщения.', flags: [MessageFlags.Ephemeral] });
 
-            if (embed.description && embed.description.includes('финку')) {
-                const hasAccess = FINKA_ALLOWED_ROLES.some(rId => i.member.roles.cache.has(rId)) || i.member.permissions.has(PermissionFlagsBits.Administrator);
-                if (!hasAccess) {
-                    return i.reply({ content: '⛔ У вас нет доступа к этому сбору.', flags: [MessageFlags.Ephemeral] });
+                if (embed.description && embed.description.includes('финку')) {
+                    const hasAccess = FINKA_ALLOWED_ROLES.some(rId => i.member.roles.cache.has(rId)) || i.member.permissions.has(PermissionFlagsBits.Administrator);
+                    if (!hasAccess) {
+                        return i.reply({ content: '⛔ У вас нет доступа к этому сбору.', flags: [MessageFlags.Ephemeral] });
+                    }
                 }
+
+                const field = embed.fields.find(f => f.name === 'Список участников:');
+                let users = field.value.split('\n').map(line => line.replace(/^\d+\.\s*/, ''));
+
+                if (users.some(line => line.includes(i.user.id))) {
+                    return i.reply({ content: 'Вы уже записаны!', flags: [MessageFlags.Ephemeral] });
+                }
+
+                const select = new StringSelectMenuBuilder()
+                    .setCustomId(`sel_pick_${maxSlots}`)
+                    .setPlaceholder(`Выберите точку (1-${maxSlots})`);
+
+                for (let k = 0; k < maxSlots; k++) {
+                    const isOccupied = users[k] !== 'Свободно';
+                    select.addOptions({
+                        label: `Точка #${k + 1}`,
+                        value: `${k}`,
+                        description: isOccupied ? 'Занято игроком' : 'Свободно для выбора',
+                        emoji: isOccupied ? '🚫' : '📍'
+                    });
+                }
+
+                const row = new ActionRowBuilder().addComponents(select);
+                await i.reply({ content: 'Выберите точку на карте:', components: [row], flags: [MessageFlags.Ephemeral] });
+            } catch (e) {
+                await i.reply({ content: 'Ошибка при открытии сбора. Сообщение могло быть удалено.', flags: [MessageFlags.Ephemeral] });
             }
-
-            const field = embed.fields.find(f => f.name === 'Список участников:');
-            let users = field.value.split('\n').map(line => line.replace(/^\d+\.\s*/, ''));
-
-            if (users.some(line => line.includes(i.user.id))) {
-                return i.reply({ content: 'Вы уже записаны!', flags: [MessageFlags.Ephemeral] });
-            }
-
-            const select = new StringSelectMenuBuilder()
-                .setCustomId(`sel_pick_${maxSlots}`)
-                .setPlaceholder(`Выберите точку (1-${maxSlots})`);
-
-            for (let k = 0; k < maxSlots; k++) {
-                const isOccupied = users[k] !== 'Свободно';
-                select.addOptions({
-                    label: `Точка #${k + 1}`,
-                    value: `${k}`,
-                    description: isOccupied ? 'Занято игроком' : 'Свободно для выбора',
-                    emoji: isOccupied ? '🚫' : '📍'
-                });
-            }
-
-            const row = new ActionRowBuilder().addComponents(select);
-            await i.reply({ content: 'Выберите точку на карте:', components: [row], flags: [MessageFlags.Ephemeral] });
             return;
         }
 
