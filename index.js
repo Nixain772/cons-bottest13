@@ -248,12 +248,14 @@ const FINKA_CHART_CHANNEL_ID = '1476625883744702694';
  */
 const finkaSchema = new mongoose.Schema({
     configId: { type: String, default: 'global' },
-    lastPayMessageId: String
+    lastPayMessageId: String,
+    lastPicMessageId: String // Добавлено поле для хранения ID последнего сбора
 });
 
 const FinkaModel = mongoose.model('FinkaData', finkaSchema);
 
 let lastPayMessageId = null;
+let lastPicMessageId = null; 
 
 async function loadFinkaData() {
     try {
@@ -262,6 +264,7 @@ async function loadFinkaData() {
             data = await FinkaModel.create({ configId: 'global' });
         }
         lastPayMessageId = data.lastPayMessageId;
+        lastPicMessageId = data.lastPicMessageId;
         console.log(`✅ Данные загружены из MongoDB.`);
     } catch (e) {
         console.error("❌ Ошибка загрузки данных:", e);
@@ -272,7 +275,7 @@ async function saveFinkaData() {
     try {
         await FinkaModel.updateOne(
             { configId: 'global' },
-            { lastPayMessageId },
+            { lastPayMessageId, lastPicMessageId },
             { upsert: true }
         );
         console.log("💾 Данные сохранены в MongoDB");
@@ -301,7 +304,6 @@ const client = new Client({
 const privateVoices = new Collection();
 const scriptCache = new Collection(); 
 const leaveCooldowns = new Collection(); 
-let lastPicMessageId = null; 
 
 /**
  * ==============================================================================
@@ -633,6 +635,7 @@ client.once(Events.ClientReady, async (c) => {
                 if (ch) {
                     const msg = await ch.send({ content: `<@&${MENTION_ROLE_ID}>`, ...createPickEmbed(0, [], 6, undefined, 'Пик слота') });
                     lastPicMessageId = msg.id;
+                    await saveFinkaData();
                 }
             }).catch(e => console.error("Auto-pick error:", e));
         }
@@ -640,11 +643,13 @@ client.once(Events.ClientReady, async (c) => {
         if (currentHour === FINKA_TARGET_HOUR && currentMinute === FINKA_TARGET_MINUTE) {
             client.channels.fetch(FINKA_CHART_CHANNEL_ID).then(async ch => {
                 if (ch) {
+                    // Важно: сохраняем ID именно сообщения с КНОПКАМИ
                     const msg = await ch.send({ 
                         content: `<@&${FINKA_MENTION_ROLE_ID}>`, 
                         ...createPickEmbed(0, [], 3, '# 💰 **Сбор на финку**\n\nОткрылась пикалка на вывоз территорий.', 'Занять слот', '💰') 
                     });
                     lastPicMessageId = msg.id;
+                    await saveFinkaData();
 
                     const embed = new EmbedBuilder()
                         .setTitle('💰 Схема вывоза финки')
@@ -1079,6 +1084,7 @@ client.on(Events.InteractionCreate, async (i) => {
             await i.reply(data);
             const msg = await i.fetchReply();
             lastPicMessageId = msg.id;
+            await saveFinkaData();
             return;
         }
 
