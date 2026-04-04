@@ -1393,11 +1393,11 @@ client.on(Events.InteractionCreate, async (i) => {
             }
 
             // Закрываем тред на форуме
+            await i.update({ content: '✅ Действие выполнено.', embeds: [], components: [] });
+
             if (i.channel.isThread()) {
                 await i.channel.setArchived(true, 'Заявка отклонена');
             }
-
-            await i.update({ content: '✅ Действие выполнено.', embeds: [], components: [] });
             return;
         }
 
@@ -1428,11 +1428,11 @@ client.on(Events.InteractionCreate, async (i) => {
                 await resultChannel.send({ embeds: [resEmbed] });
             }
 
+            await i.reply({ content: `✅ Вы приняли <@${targetId}> на роль ${roleName}.`, flags: [MessageFlags.Ephemeral] });
+
             if (i.channel.isThread()) {
                 await i.channel.setArchived(true, 'Заявка принята');
             }
-
-            await i.reply({ content: `✅ Вы приняли <@${targetId}> на роль ${roleName}.`, flags: [MessageFlags.Ephemeral] });
             return;
         }
 
