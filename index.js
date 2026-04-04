@@ -959,14 +959,14 @@ client.on(Events.InteractionCreate, async (i) => {
 
             const btnMiner = new ButtonBuilder()
                 .setCustomId('app_miner')
-                .setLabel('Стать "Шахтером"')
-                .setEmoji('⛏️')
+                .setLabel('Роль Шахтера"')
+                .setEmoji('<a:cn_pick:1489844630525706390>')
                 .setStyle(ButtonStyle.Primary);
 
             const btnFinkovoz = new ButtonBuilder()
                 .setCustomId('app_finkovoz')
-                .setLabel('Стать "Финковозом"')
-                .setEmoji('🚐')
+                .setLabel('Роль Финкавоза"')
+                .setEmoji('<a:cn_finka:1489845374985437294>')
                 .setStyle(ButtonStyle.Primary);
 
             const row = new ActionRowBuilder().addComponents(btnMiner, btnFinkovoz);
