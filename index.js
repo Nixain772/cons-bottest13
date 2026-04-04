@@ -986,13 +986,13 @@ client.on(Events.InteractionCreate, async (i) => {
 
             const btnMiner = new ButtonBuilder()
                 .setCustomId('app_miner')
-                .setLabel('Стать "Шахтером"')
+                .setLabel('Стать "Шахтером')
                 .setEmoji('⛏️')
                 .setStyle(ButtonStyle.Primary);
 
             const btnFinkovoz = new ButtonBuilder()
                 .setCustomId('app_finkovoz')
-                .setLabel('Стать "Финковозом"')
+                .setLabel('Стать "Финковозом')
                 .setEmoji('🚐')
                 .setStyle(ButtonStyle.Primary);
 
