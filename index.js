@@ -236,8 +236,8 @@ const ADMIN_ROLES = [
 
 const DEVELOPER_ID = '915665525634375710'; 
 
-const TARGET_HOUR = 7;    
-const TARGET_MINUTE = 10;  
+const TARGET_HOUR = 15;    
+const TARGET_MINUTE = 50;  
 const UTC_OFFSET = 3;     
 
 const FINKA_TARGET_HOUR = 23;    
