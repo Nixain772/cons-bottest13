@@ -1007,7 +1007,7 @@ client.on(Events.InteractionCreate, async (i) => {
 
             const btnFinkovoz = new ButtonBuilder()
                 .setCustomId('app_finkovoz')
-                .setLabel('Роль Финковоза"')
+                .setLabel('Роль Финковоза')
                 .setEmoji('<a:cn_finka:1489845374985437294>')
                 .setStyle(ButtonStyle.Primary);
 
