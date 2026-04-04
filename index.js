@@ -220,6 +220,10 @@ const LOG_CHANNEL_ID = '1407346843372752927';
 const LOG_RECIPIENT_ID = '915665525634375710'; 
 const FKICK_LOG_CHANNEL_ID = '1475480065578897550'; 
 
+const APPLICATION_LOG_CHANNEL_ID = '1489683841433079962'; // TODO: Замените на ID канала для заявок на шахтера/финку
+const MINER_ROLE_ID = '1482734579214450809'; // TODO: Замените на ID роли Шахтера
+const FINKOVOZ_ROLE_ID = '1489835380164526103'; // TODO: Замените на ID роли Финковоза
+
 const PRIVATE_CATEGORY_ID = '1464990614025408635';
 let voiceTriggerId = '1477572106710679623'; 
 
@@ -231,7 +235,7 @@ const ADMIN_ROLES = [
 
 const DEVELOPER_ID = '915665525634375710'; 
 
-const TARGET_HOUR = 20;    
+const TARGET_HOUR = 7;    
 const TARGET_MINUTE = 10;  
 const UTC_OFFSET = 3;     
 
@@ -575,6 +579,10 @@ client.once(Events.ClientReady, async (c) => {
         new SlashCommandBuilder()
             .setName('setup_academy')
             .setDescription('Создать сообщение с заявкой в академию'),
+        new SlashCommandBuilder()
+            .setName('setup_role_apps')
+            .setDescription('Создать сообщение с заявками на Шахтера/Финковоза')
+            .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
         new SlashCommandBuilder()
             .setName('pay_list')
             .setDescription('Создать пустой список оплаты на сегодня'),
@@ -942,6 +950,31 @@ client.on(Events.InteractionCreate, async (i) => {
             return;
         }
 
+        if (i.commandName === 'setup_role_apps') {
+            const embed = new EmbedBuilder()
+                .setTitle('📋 Заявки в отделы')
+                .setDescription('Нажмите на нужную кнопку ниже, чтобы подать заявку в соответствующий отдел.')
+                .setColor('#2F3136');
+
+            const btnMiner = new ButtonBuilder()
+                .setCustomId('app_miner')
+                .setLabel('Стать "Шахтером"')
+                .setEmoji('⛏️')
+                .setStyle(ButtonStyle.Primary);
+
+            const btnFinkovoz = new ButtonBuilder()
+                .setCustomId('app_finkovoz')
+                .setLabel('Стать "Финковозом"')
+                .setEmoji('🚐')
+                .setStyle(ButtonStyle.Primary);
+
+            const row = new ActionRowBuilder().addComponents(btnMiner, btnFinkovoz);
+
+            await i.channel.send({ embeds: [embed], components: [row] });
+            await i.reply({ content: '✅ Панель заявок создана.', flags: [MessageFlags.Ephemeral] });
+            return;
+        }
+
         if (i.commandName === 'send_embed') {
             const t1 = i.options.getString('title1');
             const d1 = i.options.getString('desc1');
@@ -1195,6 +1228,69 @@ client.on(Events.InteractionCreate, async (i) => {
             return await i.showModal(modal);
         }
 
+        if (i.customId === 'app_miner' || i.customId === 'app_finkovoz') {
+            const roleName = i.customId === 'app_miner' ? 'Шахтера' : 'Финковоза';
+            const roleId = i.customId === 'app_miner' ? 'miner' : 'finkovoz';
+
+            await i.reply({ content: '~ Дождитесь решения от руководства данного "отдела", возможно они примут Вас в состав шахты/финки', flags: [MessageFlags.Ephemeral] });
+
+            const logChannel = i.guild.channels.cache.get(APPLICATION_LOG_CHANNEL_ID);
+            if (logChannel) {
+                const embed = new EmbedBuilder()
+                    .setTitle(`Новая заявка: ${roleName}`)
+                    .setDescription(`Член семьи <@${i.user.id}> подал заявку на роль "${roleName}", решите брать его или нет:`)
+                    .setColor('#FFA500')
+                    .setTimestamp();
+
+                const btnAccept = new ButtonBuilder()
+                    .setCustomId(`app_accept_${roleId}_${i.user.id}`)
+                    .setLabel('Взять')
+                    .setStyle(ButtonStyle.Success);
+
+                const btnReject = new ButtonBuilder()
+                    .setCustomId(`app_reject_${roleId}_${i.user.id}`)
+                    .setLabel('Отклонить')
+                    .setStyle(ButtonStyle.Danger);
+
+                const row = new ActionRowBuilder().addComponents(btnAccept, btnReject);
+                await logChannel.send({ embeds: [embed], components: [row] });
+            }
+            return;
+        }
+
+        if (i.customId.startsWith('app_accept_') || i.customId.startsWith('app_reject_')) {
+            const isAdmin = ADMIN_ROLES.some(r => i.member.roles.cache.has(r)) || i.member.permissions.has(PermissionFlagsBits.Administrator);
+            if (!isAdmin) return i.reply({ content: '⛔ У вас нет прав для решения по заявкам.', flags: [MessageFlags.Ephemeral] });
+
+            const parts = i.customId.split('_');
+            const action = parts[1]; 
+            const roleType = parts[2]; 
+            const targetId = parts[3];
+
+            const roleName = roleType === 'miner' ? 'Шахтера' : 'Финковоза';
+            const roleIdTarget = roleType === 'miner' ? MINER_ROLE_ID : FINKOVOZ_ROLE_ID;
+
+            const targetMember = await i.guild.members.fetch(targetId).catch(() => null);
+
+            if (action === 'accept') {
+                if (targetMember) {
+                    await targetMember.roles.add(roleIdTarget).catch(console.error);
+                }
+                const embed = EmbedBuilder.from(i.message.embeds[0])
+                    .setColor('#00FF00')
+                    .setDescription(`✅ Член семьи <@${targetId}> **ПРИНЯТ** на роль "${roleName}"\nОдобрил: <@${i.user.id}>`);
+                await i.message.edit({ embeds: [embed], components: [] });
+                await i.reply({ content: `✅ Вы приняли <@${targetId}> на роль ${roleName}.`, flags: [MessageFlags.Ephemeral] });
+            } else {
+                const embed = EmbedBuilder.from(i.message.embeds[0])
+                    .setColor('#FF0000')
+                    .setDescription(`❌ Член семьи <@${targetId}> **ОТКЛОНЕН** на роль "${roleName}"\nОтклонил: <@${i.user.id}>`);
+                await i.message.edit({ embeds: [embed], components: [] });
+                await i.reply({ content: `❌ Вы отклонили заявку <@${targetId}>.`, flags: [MessageFlags.Ephemeral] });
+            }
+            return;
+        }
+
         if (['ac_take', 'ac_deny', 'ac_close'].includes(i.customId) || i.customId.startsWith('ac_call_') || i.customId.startsWith('ac_approve_')) {
             const isAdmin = ADMIN_ROLES.some(r => i.member.roles.cache.has(r)) || i.member.permissions.has(PermissionFlagsBits.Administrator);
             if (!isAdmin) return i.reply({ content: '⛔ Только руководство может это делать.', flags: [MessageFlags.Ephemeral] });
@@ -1281,11 +1377,11 @@ client.on(Events.InteractionCreate, async (i) => {
                     emoji = '💰';
                 }
 
-                leaveCooldowns.set(i.user.id, Date.now() + 180000);
+                leaveCooldowns.set(i.user.id, Date.now() + 60000);
 
                 const newData = createPickEmbed(usersCount, finalUsers, maxSlots, embed.description, label, emoji);
                 await msg.edit(newData);
-                await i.reply({ content: `Вы успешно покинули слот #${userIndex + 1}. Повторная запись доступна через 3 минуты.`, flags: [MessageFlags.Ephemeral] });
+                await i.reply({ content: `Вы успешно покинули слот #${userIndex + 1}. Повторная запись доступна через 1 минуту.`, flags: [MessageFlags.Ephemeral] });
             } catch (e) {
                 await i.reply({ content: 'Ошибка при выходе. Возможно, сообщение было удалено.', flags: [MessageFlags.Ephemeral] });
             }
