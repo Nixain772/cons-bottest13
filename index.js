@@ -220,7 +220,13 @@ const LOG_CHANNEL_ID = '1407346843372752927';
 const LOG_RECIPIENT_ID = '915665525634375710'; 
 const FKICK_LOG_CHANNEL_ID = '1475480065578897550'; 
 
-const APPLICATION_LOG_CHANNEL_ID = '1489683841433079962'; 
+// --- РОЛИ ДЛЯ ПИНГА В ЗАЯВКАХ ---
+const ROLE_NACH_SHAKHTY = '1489976721800167424'; 
+const ROLE_RUK_FINKI = '1489976613738385625'; 
+const ROLE_ZAM_RUK_FINKI = '1489976691999903845'; 
+
+// --- КАНАЛЫ ЗАЯВОК ---
+const APPLICATION_LOG_CHANNEL_ID = '1489976233620930580'; // ID Канала-Форума
 const APPLICATION_RESULT_CHANNEL_ID = '1489683935293476885'; 
 const MINER_ROLE_ID = '1482734579214450809'; 
 const FINKOVOZ_ROLE_ID = '1489835380164526103'; 
@@ -236,8 +242,8 @@ const ADMIN_ROLES = [
 
 const DEVELOPER_ID = '915665525634375710'; 
 
-const TARGET_HOUR = 7;    
-const TARGET_MINUTE = 10;  
+const TARGET_HOUR = 16;    
+const TARGET_MINUTE = 37;  
 const UTC_OFFSET = 3;     
 
 const FINKA_TARGET_HOUR = 23;    
@@ -263,8 +269,7 @@ const blacklistSchema = new mongoose.Schema({
     timestamp: { type: Date, default: Date.now }
 });
 
-// Создаем составной уникальный индекс: связка ID + ТИП должна быть уникальной.
-// Это позволяет одному юзеру быть в ЧС шахты и НЕ быть в ЧС финки (или наоборот).
+// Уникальность по паре ID пользователя + тип отдела
 blacklistSchema.index({ userId: 1, type: 1 }, { unique: true });
 
 const FinkaModel = mongoose.model('FinkaData', finkaSchema);
@@ -556,18 +561,16 @@ client.once(Events.ClientReady, async (c) => {
             .then(async () => {
                 console.log("Connected to MongoDB Atlas");
                 
-                // КРИТИЧЕСКИЙ МОМЕНТ: Удаляем старый некорректный индекс при запуске, если он мешает
+                // Исправление ошибок с индексами при запуске
                 try {
                     const db = mongoose.connection.db;
                     const collection = db.collection('appblacklists');
-                    await collection.dropIndex('userId_1').catch(() => console.log("Старый индекс userId_1 не найден или уже удален."));
+                    await collection.dropIndex('userId_1').catch(() => {});
                 } catch (idxErr) {}
 
                 await loadFinkaData();
             })
             .catch(err => console.error("MongoDB Connection Error (Non-fatal):", err));
-    } else {
-        console.error("❌ MONGODB_URI не настроен!");
     }
 
     console.log(`✅ Бот ${c.user.tag} запущен!`);
@@ -1004,7 +1007,7 @@ client.on(Events.InteractionCreate, async (i) => {
 
             const btnFinkovoz = new ButtonBuilder()
                 .setCustomId('app_finkovoz')
-                .setLabel('Роль Финоковоза')
+                .setLabel('Роль Финковоза"')
                 .setEmoji('<a:cn_finka:1489845374985437294>')
                 .setStyle(ButtonStyle.Primary);
 
@@ -1268,38 +1271,66 @@ client.on(Events.InteractionCreate, async (i) => {
             return await i.showModal(modal);
         }
 
+        // --- ЛОГИКА ЗАЯВОК ЧЕРЕЗ ФОРУМ ---
         if (i.customId === 'app_miner' || i.customId === 'app_finkovoz') {
             const roleId = i.customId === 'app_miner' ? 'miner' : 'finkovoz';
+            const roleName = i.customId === 'app_miner' ? 'Шахтера' : 'Финковоза';
             
             const isBlacklisted = await BlacklistModel.findOne({ userId: i.user.id, type: roleId });
             if (isBlacklisted) {
-                return i.reply({ content: `❌ Вы находитесь в черном списке этого отдела и не можете подавать анкеты.`, flags: [MessageFlags.Ephemeral] });
+                return i.reply({ content: `❌ Вы находитесь в черном списке этого отдела.`, flags: [MessageFlags.Ephemeral] });
             }
 
-            const roleName = i.customId === 'app_miner' ? 'Шахтера' : 'Финковоза';
+            const forumChannel = i.guild.channels.cache.get(APPLICATION_LOG_CHANNEL_ID);
+            if (!forumChannel || forumChannel.type !== ChannelType.GuildForum) {
+                return i.reply({ content: '❌ Ошибка: Канал для логов не является форумом.', flags: [MessageFlags.Ephemeral] });
+            }
 
-            await i.reply({ content: 'Дождитесь решения от руководства данного отдела, возможно они примут Вас в состав шахты/финки', flags: [MessageFlags.Ephemeral] });
+            await i.deferReply({ flags: [MessageFlags.Ephemeral] });
 
-            const logChannel = i.guild.channels.cache.get(APPLICATION_LOG_CHANNEL_ID);
-            if (logChannel) {
-                const embed = new EmbedBuilder()
-                    .setTitle(`Новая заявка: ${roleName}`)
-                    .setDescription(`Член семьи <@${i.user.id}> подал заявку на роль "${roleName}", решите брать его или нет:`)
-                    .setColor('#FFA500')
-                    .setTimestamp();
+            // Определение ролей для пинга
+            let pingContent = '';
+            if (roleId === 'miner') {
+                pingContent = `<@&${ROLE_NACH_SHAKHTY}>`;
+            } else {
+                pingContent = `<@&${ROLE_RUK_FINKI}> <@&${ROLE_ZAM_RUK_FINKI}>`;
+            }
 
-                const btnAccept = new ButtonBuilder()
-                    .setCustomId(`app_accept_${roleId}_${i.user.id}`)
-                    .setLabel('Взять')
-                    .setStyle(ButtonStyle.Success);
+            const embed = new EmbedBuilder()
+                .setTitle(`Новая заявка: ${roleName}`)
+                .setDescription(`Член семьи <@${i.user.id}> подал заявку на роль **${roleName}**.\nРешите, брать его в отдел или нет.`)
+                .setColor('#FFA500')
+                .setThumbnail(i.user.displayAvatarURL())
+                .setTimestamp();
 
-                const btnReject = new ButtonBuilder()
-                    .setCustomId(`app_reject_confirm_${roleId}_${i.user.id}`)
-                    .setLabel('Отклонить')
-                    .setStyle(ButtonStyle.Danger);
+            const btnAccept = new ButtonBuilder()
+                .setCustomId(`app_accept_${roleId}_${i.user.id}`)
+                .setLabel('Взять')
+                .setStyle(ButtonStyle.Success);
 
-                const row = new ActionRowBuilder().addComponents(btnAccept, btnReject);
-                await logChannel.send({ embeds: [embed], components: [row] });
+            const btnReject = new ButtonBuilder()
+                .setCustomId(`app_reject_confirm_${roleId}_${i.user.id}`)
+                .setLabel('Отклонить')
+                .setStyle(ButtonStyle.Danger);
+
+            const row = new ActionRowBuilder().addComponents(btnAccept, btnReject);
+
+            try {
+                // Создаем пост в форуме
+                await forumChannel.threads.create({
+                    name: `Заявка [${roleName}] - ${i.user.username}`,
+                    autoArchiveDuration: ThreadAutoArchiveDuration.OneWeek,
+                    message: {
+                        content: pingContent,
+                        embeds: [embed],
+                        components: [row]
+                    }
+                });
+
+                await i.editReply({ content: 'Ваша заявка успешно передана руководству в отдел форума.' });
+            } catch (err) {
+                console.error(err);
+                await i.editReply({ content: '❌ Произошла ошибка при создании поста в форуме.' });
             }
             return;
         }
@@ -1340,10 +1371,9 @@ client.on(Events.InteractionCreate, async (i) => {
             const resultChannel = i.guild.channels.cache.get(APPLICATION_RESULT_CHANNEL_ID);
 
             if (isBL) {
-                // Используем поиск по паре {userId, type}, чтобы избежать дубликатов по старому индексу
                 await BlacklistModel.updateOne(
-                    { userId: targetId, type: roleType }, 
-                    { userId: targetId, type: roleType }, 
+                    { userId: targetId, type: roleType },
+                    { userId: targetId, type: roleType },
                     { upsert: true }
                 );
             }
@@ -1362,10 +1392,10 @@ client.on(Events.InteractionCreate, async (i) => {
                 await resultChannel.send({ embeds: [resEmbed] });
             }
 
-            try {
-                const logMsg = i.message.channel.messages.cache.find(m => m.embeds[0]?.description?.includes(targetId) && m.components.length > 0);
-                if (logMsg) await logMsg.delete();
-            } catch(e) {}
+            // Закрываем тред на форуме
+            if (i.channel.isThread()) {
+                await i.channel.setArchived(true, 'Заявка отклонена');
+            }
 
             await i.update({ content: '✅ Действие выполнено.', embeds: [], components: [] });
             return;
@@ -1373,7 +1403,7 @@ client.on(Events.InteractionCreate, async (i) => {
 
         if (i.customId.startsWith('app_accept_')) {
             const isAdmin = ADMIN_ROLES.some(r => i.member.roles.cache.has(r)) || i.member.permissions.has(PermissionFlagsBits.Administrator);
-            if (!isAdmin) return i.reply({ content: '⛔ У вас нет прав для решения по заявкам.', flags: [MessageFlags.Ephemeral] });
+            if (!isAdmin) return i.reply({ content: '⛔ У вас нет прав.', flags: [MessageFlags.Ephemeral] });
 
             const parts = i.customId.split('_');
             const roleType = parts[2]; 
@@ -1398,7 +1428,10 @@ client.on(Events.InteractionCreate, async (i) => {
                 await resultChannel.send({ embeds: [resEmbed] });
             }
 
-            await i.message.delete().catch(() => {});
+            if (i.channel.isThread()) {
+                await i.channel.setArchived(true, 'Заявка принята');
+            }
+
             await i.reply({ content: `✅ Вы приняли <@${targetId}> на роль ${roleName}.`, flags: [MessageFlags.Ephemeral] });
             return;
         }
@@ -1437,7 +1470,7 @@ client.on(Events.InteractionCreate, async (i) => {
             const hasAccess = allowedRoles.length === 0 || allowedRoles.some(rId => i.member.roles.cache.has(rId)) || i.member.permissions.has(PermissionFlagsBits.Administrator);
 
             if (!hasAccess) {
-                return i.reply({ content: '⛔ У вас нет подходящей роли для заполнения этой заявки.', flags: [MessageFlags.Ephemeral] });
+                return i.reply({ content: '⛔ У вас нет подходящей роли.', flags: [MessageFlags.Ephemeral] });
             }
 
             const modal = new ModalBuilder().setCustomId('modal_subota').setTitle('Заявка на помощь с сетом');
@@ -1495,7 +1528,7 @@ client.on(Events.InteractionCreate, async (i) => {
                 await msg.edit(newData);
                 await i.reply({ content: `Вы успешно покинули слот #${userIndex + 1}. Повторная запись доступна через 1 минуту.`, flags: [MessageFlags.Ephemeral] });
             } catch (e) {
-                await i.reply({ content: 'Ошибка при выходе. Возможно, сообщение было удалено.', flags: [MessageFlags.Ephemeral] });
+                await i.reply({ content: 'Ошибка при выходе.', flags: [MessageFlags.Ephemeral] });
             }
             return;
         } else if (i.customId.startsWith('btnopen_')) {
@@ -1516,7 +1549,7 @@ client.on(Events.InteractionCreate, async (i) => {
                 if (embed.description && embed.description.includes('финку')) {
                     const hasAccess = FINKA_ALLOWED_ROLES.some(rId => i.member.roles.cache.has(rId)) || i.member.permissions.has(PermissionFlagsBits.Administrator);
                     if (!hasAccess) {
-                        return i.reply({ content: '⛔ У вас нет доступа к этому сбору.', flags: [MessageFlags.Ephemeral] });
+                        return i.reply({ content: '⛔ У вас нет доступа.', flags: [MessageFlags.Ephemeral] });
                     }
                 }
 
@@ -1544,7 +1577,7 @@ client.on(Events.InteractionCreate, async (i) => {
                 const row = new ActionRowBuilder().addComponents(select);
                 await i.reply({ content: 'Выберите точку на карте:', components: [row], flags: [MessageFlags.Ephemeral] });
             } catch (e) {
-                await i.reply({ content: 'Ошибка при открытии сбора. Сообщение могло быть удалено.', flags: [MessageFlags.Ephemeral] });
+                await i.reply({ content: 'Ошибка при открытии сбора.', flags: [MessageFlags.Ephemeral] });
             }
             return;
         }
@@ -1552,7 +1585,7 @@ client.on(Events.InteractionCreate, async (i) => {
         if (i.customId.startsWith('vc_')) {
             const ownerId = privateVoices.get(i.channel.id);
             if (ownerId !== i.user.id && !i.member.permissions.has(PermissionFlagsBits.Administrator)) {
-                return i.reply({ content: 'Вы не владелец этого канала!', flags: [MessageFlags.Ephemeral] });
+                return i.reply({ content: 'Вы не владелец!', flags: [MessageFlags.Ephemeral] });
             }
 
             if (i.customId === 'vc_rename') {
@@ -1570,7 +1603,7 @@ client.on(Events.InteractionCreate, async (i) => {
                 let selectId = '';
 
                 if (i.customId === 'vc_transfer') { selectId = 'sel_transfer'; placeholder = 'Кому передать права?'; }
-                if (i.customId === 'vc_kick') { selectId = 'sel_kick'; placeholder = 'Кого кикнуть и забанить?'; }
+                if (i.customId === 'vc_kick') { selectId = 'sel_kick'; placeholder = 'Кого кикнуть?'; }
                 if (i.customId === 'vc_permit') { selectId = 'sel_permit'; placeholder = 'Кому дать доступ?'; }
                 if (i.customId === 'vc_reject') { selectId = 'sel_reject'; placeholder = 'У кого забрать доступ?'; }
 
@@ -1599,7 +1632,7 @@ client.on(Events.InteractionCreate, async (i) => {
         } else if (i.customId === 'sel_kick') {
             await i.channel.permissionOverwrites.create(target, { Connect: false });
             if (target.voice.channelId === i.channel.id) await target.voice.disconnect();
-            await i.reply({ content: `<@${target.id}> забанен в канале.`, flags: [MessageFlags.Ephemeral] });
+            await i.reply({ content: `<@${target.id}> забанен.`, flags: [MessageFlags.Ephemeral] });
         } else if (i.customId === 'sel_permit') {
             await i.channel.permissionOverwrites.create(target, { Connect: true, Speak: true });
             await i.reply({ content: `<@${target.id}> получил доступ.`, flags: [MessageFlags.Ephemeral] });
