@@ -237,7 +237,7 @@ const ADMIN_ROLES = [
 const DEVELOPER_ID = '915665525634375710'; 
 
 const TARGET_HOUR = 7;    
-const TARGET_MINUTE = 25;  
+const TARGET_MINUTE = 10;  
 const UTC_OFFSET = 3;     
 
 const FINKA_TARGET_HOUR = 23;    
@@ -257,7 +257,14 @@ const finkaSchema = new mongoose.Schema({
     lastPicMessageId: String
 });
 
+const blacklistSchema = new mongoose.Schema({
+    userId: { type: String, required: true, unique: true },
+    type: { type: String, enum: ['miner', 'finkovoz'], required: true },
+    timestamp: { type: Date, default: Date.now }
+});
+
 const FinkaModel = mongoose.model('FinkaData', finkaSchema);
+const BlacklistModel = mongoose.model('AppBlacklist', blacklistSchema);
 
 let lastPayMessageId = null;
 let lastPicMessageId = null; 
@@ -626,7 +633,13 @@ client.once(Events.ClientReady, async (c) => {
         new SlashCommandBuilder()
             .setName('voice_join')
             .setDescription('Подключить бота к голосовому каналу (Только для разработчика)')
-            .addChannelOption(o => o.setName('channel').setDescription('Выберите канал').setRequired(true).addChannelTypes(ChannelType.GuildVoice))
+            .addChannelOption(o => o.setName('channel').setDescription('Выберите канал').setRequired(true).addChannelTypes(ChannelType.GuildVoice)),
+        new SlashCommandBuilder()
+            .setName('app_blacklist')
+            .setDescription('Управление черным списком заявок')
+            .addSubcommand(sub => sub.setName('remove_miner').setDescription('Удалить пользователя из ЧС Шахты').addUserOption(o => o.setName('user').setDescription('Пользователь').setRequired(true)))
+            .addSubcommand(sub => sub.setName('remove_finkovoz').setDescription('Удалить пользователя из ЧС Финки').addUserOption(o => o.setName('user').setDescription('Пользователь').setRequired(true)))
+            .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     ].map(cmd => cmd.toJSON());
 
     const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
@@ -869,6 +882,20 @@ client.on(Events.InteractionCreate, async (i) => {
             return i.reply({ content: '⛔ У вас нет доступа к этой команде.', flags: [MessageFlags.Ephemeral] });
         }
 
+        if (i.commandName === 'app_blacklist') {
+            const sub = i.options.getSubcommand();
+            const target = i.options.getUser('user');
+            
+            if (sub === 'remove_miner') {
+                await BlacklistModel.deleteOne({ userId: target.id, type: 'miner' });
+                await i.reply({ content: `✅ Пользователь <@${target.id}> удален из ЧС **Шахты**.`, flags: [MessageFlags.Ephemeral] });
+            } else if (sub === 'remove_finkovoz') {
+                await BlacklistModel.deleteOne({ userId: target.id, type: 'finkovoz' });
+                await i.reply({ content: `✅ Пользователь <@${target.id}> удален из ЧС **Финки**.`, flags: [MessageFlags.Ephemeral] });
+            }
+            return;
+        }
+
         if (i.commandName === 'fkick') {
             const targetUser = i.options.getUser('user');
 
@@ -959,14 +986,14 @@ client.on(Events.InteractionCreate, async (i) => {
 
             const btnMiner = new ButtonBuilder()
                 .setCustomId('app_miner')
-                .setLabel('Роль Шахтера"')
-                .setEmoji('<a:cn_pick:1489844630525706390>')
+                .setLabel('Стать "Шахтером"')
+                .setEmoji('⛏️')
                 .setStyle(ButtonStyle.Primary);
 
             const btnFinkovoz = new ButtonBuilder()
                 .setCustomId('app_finkovoz')
-                .setLabel('Роль Финкавоза"')
-                .setEmoji('<a:cn_finka:1489845374985437294>')
+                .setLabel('Стать "Финковозом"')
+                .setEmoji('🚐')
                 .setStyle(ButtonStyle.Primary);
 
             const row = new ActionRowBuilder().addComponents(btnMiner, btnFinkovoz);
@@ -1230,8 +1257,14 @@ client.on(Events.InteractionCreate, async (i) => {
         }
 
         if (i.customId === 'app_miner' || i.customId === 'app_finkovoz') {
-            const roleName = i.customId === 'app_miner' ? 'Шахтера' : 'Финковоза';
             const roleId = i.customId === 'app_miner' ? 'miner' : 'finkovoz';
+            
+            const isBlacklisted = await BlacklistModel.findOne({ userId: i.user.id, type: roleId });
+            if (isBlacklisted) {
+                return i.reply({ content: `❌ Вы находитесь в черном списке этого отдела и не можете подавать анкеты.`, flags: [MessageFlags.Ephemeral] });
+            }
+
+            const roleName = i.customId === 'app_miner' ? 'Шахтера' : 'Финковоза';
 
             await i.reply({ content: '~ Дождитесь решения от руководства данного "отдела", возможно они примут Вас в состав шахты/финки', flags: [MessageFlags.Ephemeral] });
 
@@ -1249,7 +1282,7 @@ client.on(Events.InteractionCreate, async (i) => {
                     .setStyle(ButtonStyle.Success);
 
                 const btnReject = new ButtonBuilder()
-                    .setCustomId(`app_reject_${roleId}_${i.user.id}`)
+                    .setCustomId(`app_reject_confirm_${roleId}_${i.user.id}`)
                     .setLabel('Отклонить')
                     .setStyle(ButtonStyle.Danger);
 
@@ -1259,12 +1292,74 @@ client.on(Events.InteractionCreate, async (i) => {
             return;
         }
 
-        if (i.customId.startsWith('app_accept_') || i.customId.startsWith('app_reject_')) {
+        if (i.customId.startsWith('app_reject_confirm_')) {
+            const parts = i.customId.split('_');
+            const roleType = parts[3];
+            const targetId = parts[4];
+
+            const embed = new EmbedBuilder()
+                .setTitle('Выбор действия')
+                .setDescription(`Вы отклоняете заявку <@${targetId}>. Хотите ли вы занести его в ЧС этого отдела?`)
+                .setColor('#2F3136');
+
+            const btnRejectOnly = new ButtonBuilder()
+                .setCustomId(`app_final_reject_only_${roleType}_${targetId}`)
+                .setLabel('Просто отклонить')
+                .setStyle(ButtonStyle.Secondary);
+
+            const btnRejectBlacklist = new ButtonBuilder()
+                .setCustomId(`app_final_reject_bl_${roleType}_${targetId}`)
+                .setLabel('Отклонить + ЧС')
+                .setStyle(ButtonStyle.Danger);
+
+            const row = new ActionRowBuilder().addComponents(btnRejectOnly, btnRejectBlacklist);
+            await i.reply({ embeds: [embed], components: [row], flags: [MessageFlags.Ephemeral] });
+            return;
+        }
+
+        if (i.customId.startsWith('app_final_reject_')) {
+            const parts = i.customId.split('_');
+            const isBL = parts[3] === 'bl';
+            const roleType = parts[4];
+            const targetId = parts[5];
+
+            const roleName = roleType === 'miner' ? 'Шахтера' : 'Финковоза';
+            const targetMember = await i.guild.members.fetch(targetId).catch(() => null);
+            const resultChannel = i.guild.channels.cache.get(APPLICATION_RESULT_CHANNEL_ID);
+
+            if (isBL) {
+                await BlacklistModel.updateOne({ userId: targetId, type: roleType }, { userId: targetId, type: roleType }, { upsert: true });
+            }
+
+            if (targetMember) {
+                const blText = isBL ? " Вы также внесены в черный список этого отдела." : "";
+                await targetMember.send(`❌ К сожалению, ваша заявка на роль **${roleName}** была **отклонена**. ${blText}`).catch(() => {});
+            }
+
+            if (resultChannel) {
+                const blLabel = isBL ? " (+ ЧС)" : "";
+                const resEmbed = new EmbedBuilder()
+                    .setColor('#FF0000')
+                    .setDescription(`❌ Член семьи <@${targetId}> **ОТКЛОНЕН** на роль "${roleName}"${blLabel}\nОтклонил: <@${i.user.id}>`)
+                    .setTimestamp();
+                await resultChannel.send({ embeds: [resEmbed] });
+            }
+
+            // Удаляем исходное сообщение с кнопками Принять/Отклонить в лог-канале
+            try {
+                const logMsg = i.message.channel.messages.cache.find(m => m.embeds[0]?.description?.includes(targetId) && m.components.length > 0);
+                if (logMsg) await logMsg.delete();
+            } catch(e) {}
+
+            await i.update({ content: '✅ Действие выполнено.', embeds: [], components: [] });
+            return;
+        }
+
+        if (i.customId.startsWith('app_accept_')) {
             const isAdmin = ADMIN_ROLES.some(r => i.member.roles.cache.has(r)) || i.member.permissions.has(PermissionFlagsBits.Administrator);
             if (!isAdmin) return i.reply({ content: '⛔ У вас нет прав для решения по заявкам.', flags: [MessageFlags.Ephemeral] });
 
             const parts = i.customId.split('_');
-            const action = parts[1]; 
             const roleType = parts[2]; 
             const targetId = parts[3];
 
@@ -1274,38 +1369,21 @@ client.on(Events.InteractionCreate, async (i) => {
             const targetMember = await i.guild.members.fetch(targetId).catch(() => null);
             const resultChannel = i.guild.channels.cache.get(APPLICATION_RESULT_CHANNEL_ID);
 
-            if (action === 'accept') {
-                if (targetMember) {
-                    await targetMember.roles.add(roleIdTarget).catch(console.error);
-                    await targetMember.send(`✅ Ваша заявка на роль **${roleName}** была **одобрена**!`).catch(() => {});
-                }
-                
-                if (resultChannel) {
-                    const resEmbed = new EmbedBuilder()
-                        .setColor('#00FF00')
-                        .setDescription(`✅ Член семьи <@${targetId}> **ПРИНЯТ** на роль "${roleName}"\nОдобрил: <@${i.user.id}>`)
-                        .setTimestamp();
-                    await resultChannel.send({ embeds: [resEmbed] });
-                }
-
-                await i.message.delete().catch(() => {});
-                await i.reply({ content: `✅ Вы приняли <@${targetId}> на роль ${roleName}.`, flags: [MessageFlags.Ephemeral] });
-            } else {
-                if (targetMember) {
-                    await targetMember.send(`❌ К сожалению, ваша заявка на роль **${roleName}** была **отклонена**.`).catch(() => {});
-                }
-
-                if (resultChannel) {
-                    const resEmbed = new EmbedBuilder()
-                        .setColor('#FF0000')
-                        .setDescription(`❌ Член семьи <@${targetId}> **ОТКЛОНЕН** на роль "${roleName}"\nОтклонил: <@${i.user.id}>`)
-                        .setTimestamp();
-                    await resultChannel.send({ embeds: [resEmbed] });
-                }
-
-                await i.message.delete().catch(() => {});
-                await i.reply({ content: `❌ Вы отклонили заявку <@${targetId}>.`, flags: [MessageFlags.Ephemeral] });
+            if (targetMember) {
+                await targetMember.roles.add(roleIdTarget).catch(console.error);
+                await targetMember.send(`✅ Ваша заявка на роль **${roleName}** была **одобрена**!`).catch(() => {});
             }
+            
+            if (resultChannel) {
+                const resEmbed = new EmbedBuilder()
+                    .setColor('#00FF00')
+                    .setDescription(`✅ Член семьи <@${targetId}> **ПРИНЯТ** на роль "${roleName}"\nОдобрил: <@${i.user.id}>`)
+                    .setTimestamp();
+                await resultChannel.send({ embeds: [resEmbed] });
+            }
+
+            await i.message.delete().catch(() => {});
+            await i.reply({ content: `✅ Вы приняли <@${targetId}> на роль ${roleName}.`, flags: [MessageFlags.Ephemeral] });
             return;
         }
 
