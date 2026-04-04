@@ -213,15 +213,15 @@ http.createServer((req, res) => {
  */
 const ALLOWED_GUILDS = ['1465230913473478710', '1096080921427443832']; 
 const AUTO_ROLE_ID = '1391087961088721047'; 
-const MAIN_CHANNEL_ID = '1489683889944526868'; 
-const MENTION_ROLE_ID = '1482734579214450809'; 
+const MAIN_CHANNEL_ID = '1426174226464899163'; 
+const MENTION_ROLE_ID = '1426222945705001262'; 
 const WELCOME_CHANNEL_ID = '1391856427508830289'; 
 const LOG_CHANNEL_ID = '1407346843372752927'; 
 const LOG_RECIPIENT_ID = '915665525634375710'; 
 const FKICK_LOG_CHANNEL_ID = '1475480065578897550'; 
 
 const APPLICATION_LOG_CHANNEL_ID = '1489683841433079962'; 
-const APPLICATION_RESULT_CHANNEL_ID = '1489683889944526868'; // TODO: Замените на ID закрытого канала для логов выдачи ролей
+const APPLICATION_RESULT_CHANNEL_ID = '1489683935293476885'; 
 const MINER_ROLE_ID = '1482734579214450809'; 
 const FINKOVOZ_ROLE_ID = '1489835380164526103'; 
 
@@ -237,7 +237,7 @@ const ADMIN_ROLES = [
 const DEVELOPER_ID = '915665525634375710'; 
 
 const TARGET_HOUR = 7;    
-const TARGET_MINUTE = 17;  
+const TARGET_MINUTE = 10;  
 const UTC_OFFSET = 3;     
 
 const FINKA_TARGET_HOUR = 23;    
@@ -1233,7 +1233,7 @@ client.on(Events.InteractionCreate, async (i) => {
             const roleName = i.customId === 'app_miner' ? 'Шахтера' : 'Финковоза';
             const roleId = i.customId === 'app_miner' ? 'miner' : 'finkovoz';
 
-            await i.reply({ content: 'Дождитесь решения от руководства данного отдела, возможно они примут Вас в состав шахты/финки', flags: [MessageFlags.Ephemeral] });
+            await i.reply({ content: '~ Дождитесь решения от руководства данного "отдела", возможно они примут Вас в состав шахты/финки', flags: [MessageFlags.Ephemeral] });
 
             const logChannel = i.guild.channels.cache.get(APPLICATION_LOG_CHANNEL_ID);
             if (logChannel) {
@@ -1277,12 +1277,9 @@ client.on(Events.InteractionCreate, async (i) => {
             if (action === 'accept') {
                 if (targetMember) {
                     await targetMember.roles.add(roleIdTarget).catch(console.error);
-                    
-                    // Отправка пользователю в ЛС
                     await targetMember.send(`✅ Ваша заявка на роль **${roleName}** была **одобрена**!`).catch(() => {});
                 }
                 
-                // Сообщение в закрытый канал
                 if (resultChannel) {
                     const resEmbed = new EmbedBuilder()
                         .setColor('#00FF00')
@@ -1291,20 +1288,13 @@ client.on(Events.InteractionCreate, async (i) => {
                     await resultChannel.send({ embeds: [resEmbed] });
                 }
 
-                // Обновление исходного сообщения (убираем кнопки)
-                const embed = EmbedBuilder.from(i.message.embeds[0])
-                    .setColor('#00FF00')
-                    .setDescription(`✅ Заявка <@${targetId}> обработана (Принят).`);
-                await i.message.edit({ embeds: [embed], components: [] });
-                
-                await i.reply({ content: `✅ Вы приняли <@${targetId}> на роль ${roleName}. Сообщение отправлено в закрытый канал и в ЛС.`, flags: [MessageFlags.Ephemeral] });
+                await i.message.delete().catch(() => {});
+                await i.reply({ content: `✅ Вы приняли <@${targetId}> на роль ${roleName}.`, flags: [MessageFlags.Ephemeral] });
             } else {
                 if (targetMember) {
-                    // Отправка пользователю в ЛС
                     await targetMember.send(`❌ К сожалению, ваша заявка на роль **${roleName}** была **отклонена**.`).catch(() => {});
                 }
 
-                // Сообщение в закрытый канал
                 if (resultChannel) {
                     const resEmbed = new EmbedBuilder()
                         .setColor('#FF0000')
@@ -1313,13 +1303,8 @@ client.on(Events.InteractionCreate, async (i) => {
                     await resultChannel.send({ embeds: [resEmbed] });
                 }
 
-                // Обновление исходного сообщения (убираем кнопки)
-                const embed = EmbedBuilder.from(i.message.embeds[0])
-                    .setColor('#FF0000')
-                    .setDescription(`❌ Заявка <@${targetId}> обработана (Отклонен).`);
-                await i.message.edit({ embeds: [embed], components: [] });
-                
-                await i.reply({ content: `❌ Вы отклонили заявку <@${targetId}>. Сообщение отправлено в закрытый канал и в ЛС.`, flags: [MessageFlags.Ephemeral] });
+                await i.message.delete().catch(() => {});
+                await i.reply({ content: `❌ Вы отклонили заявку <@${targetId}>.`, flags: [MessageFlags.Ephemeral] });
             }
             return;
         }
