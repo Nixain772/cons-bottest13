@@ -236,8 +236,8 @@ const ADMIN_ROLES = [
 
 const DEVELOPER_ID = '915665525634375710'; 
 
-const TARGET_HOUR = 15;    
-const TARGET_MINUTE = 50;  
+const TARGET_HOUR = 7;    
+const TARGET_MINUTE = 10;  
 const UTC_OFFSET = 3;     
 
 const FINKA_TARGET_HOUR = 23;    
@@ -258,10 +258,14 @@ const finkaSchema = new mongoose.Schema({
 });
 
 const blacklistSchema = new mongoose.Schema({
-    userId: { type: String, required: true, unique: true },
+    userId: { type: String, required: true },
     type: { type: String, enum: ['miner', 'finkovoz'], required: true },
     timestamp: { type: Date, default: Date.now }
 });
+
+// Создаем составной уникальный индекс: связка ID + ТИП должна быть уникальной.
+// Это позволяет одному юзеру быть в ЧС шахты и НЕ быть в ЧС финки (или наоборот).
+blacklistSchema.index({ userId: 1, type: 1 }, { unique: true });
 
 const FinkaModel = mongoose.model('FinkaData', finkaSchema);
 const BlacklistModel = mongoose.model('AppBlacklist', blacklistSchema);
@@ -551,6 +555,14 @@ client.once(Events.ClientReady, async (c) => {
         mongoose.connect(process.env.MONGODB_URI, { serverSelectionTimeoutMS: 5000 })
             .then(async () => {
                 console.log("Connected to MongoDB Atlas");
+                
+                // КРИТИЧЕСКИЙ МОМЕНТ: Удаляем старый некорректный индекс при запуске, если он мешает
+                try {
+                    const db = mongoose.connection.db;
+                    const collection = db.collection('appblacklists');
+                    await collection.dropIndex('userId_1').catch(() => console.log("Старый индекс userId_1 не найден или уже удален."));
+                } catch (idxErr) {}
+
                 await loadFinkaData();
             })
             .catch(err => console.error("MongoDB Connection Error (Non-fatal):", err));
@@ -992,7 +1004,7 @@ client.on(Events.InteractionCreate, async (i) => {
 
             const btnFinkovoz = new ButtonBuilder()
                 .setCustomId('app_finkovoz')
-                .setLabel('Роль Финковоза')
+                .setLabel('Роль Финоковоза')
                 .setEmoji('<a:cn_finka:1489845374985437294>')
                 .setStyle(ButtonStyle.Primary);
 
@@ -1266,7 +1278,7 @@ client.on(Events.InteractionCreate, async (i) => {
 
             const roleName = i.customId === 'app_miner' ? 'Шахтера' : 'Финковоза';
 
-            await i.reply({ content: '~ Дождитесь решения от руководства данного отдела, возможно они примут Вас в состав шахты/финки', flags: [MessageFlags.Ephemeral] });
+            await i.reply({ content: 'Дождитесь решения от руководства данного отдела, возможно они примут Вас в состав шахты/финки', flags: [MessageFlags.Ephemeral] });
 
             const logChannel = i.guild.channels.cache.get(APPLICATION_LOG_CHANNEL_ID);
             if (logChannel) {
@@ -1328,7 +1340,12 @@ client.on(Events.InteractionCreate, async (i) => {
             const resultChannel = i.guild.channels.cache.get(APPLICATION_RESULT_CHANNEL_ID);
 
             if (isBL) {
-                await BlacklistModel.updateOne({ userId: targetId, type: roleType }, { userId: targetId, type: roleType }, { upsert: true });
+                // Используем поиск по паре {userId, type}, чтобы избежать дубликатов по старому индексу
+                await BlacklistModel.updateOne(
+                    { userId: targetId, type: roleType }, 
+                    { userId: targetId, type: roleType }, 
+                    { upsert: true }
+                );
             }
 
             if (targetMember) {
@@ -1345,7 +1362,6 @@ client.on(Events.InteractionCreate, async (i) => {
                 await resultChannel.send({ embeds: [resEmbed] });
             }
 
-            // Удаляем исходное сообщение с кнопками Принять/Отклонить в лог-канале
             try {
                 const logMsg = i.message.channel.messages.cache.find(m => m.embeds[0]?.description?.includes(targetId) && m.components.length > 0);
                 if (logMsg) await logMsg.delete();
