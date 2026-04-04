@@ -1233,7 +1233,7 @@ client.on(Events.InteractionCreate, async (i) => {
             const roleName = i.customId === 'app_miner' ? 'Шахтера' : 'Финковоза';
             const roleId = i.customId === 'app_miner' ? 'miner' : 'finkovoz';
 
-            await i.reply({ content: '~ Дождитесь решения от руководства данного "отдела", возможно они примут Вас в состав шахты/финки', flags: [MessageFlags.Ephemeral] });
+            await i.reply({ content: 'Дождитесь решения от руководства данного отдела, возможно они примут Вас в состав шахты/финки', flags: [MessageFlags.Ephemeral] });
 
             const logChannel = i.guild.channels.cache.get(APPLICATION_LOG_CHANNEL_ID);
             if (logChannel) {
