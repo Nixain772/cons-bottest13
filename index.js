@@ -213,16 +213,17 @@ http.createServer((req, res) => {
  */
 const ALLOWED_GUILDS = ['1465230913473478710', '1096080921427443832']; 
 const AUTO_ROLE_ID = '1391087961088721047'; 
-const MAIN_CHANNEL_ID = '1426174226464899163'; 
+const MAIN_CHANNEL_ID = '1489683889944526868'; 
 const MENTION_ROLE_ID = '1426222945705001262'; 
 const WELCOME_CHANNEL_ID = '1391856427508830289'; 
 const LOG_CHANNEL_ID = '1407346843372752927'; 
 const LOG_RECIPIENT_ID = '915665525634375710'; 
 const FKICK_LOG_CHANNEL_ID = '1475480065578897550'; 
 
-const APPLICATION_LOG_CHANNEL_ID = '1489683841433079962'; // TODO: Замените на ID канала для заявок на шахтера/финку
-const MINER_ROLE_ID = '1482734579214450809'; // TODO: Замените на ID роли Шахтера
-const FINKOVOZ_ROLE_ID = '1489835380164526103'; // TODO: Замените на ID роли Финковоза
+const APPLICATION_LOG_CHANNEL_ID = '1489683841433079962'; 
+const APPLICATION_RESULT_CHANNEL_ID = '1489683889944526868'; // TODO: Замените на ID закрытого канала для логов выдачи ролей
+const MINER_ROLE_ID = '1482734579214450809'; 
+const FINKOVOZ_ROLE_ID = '1489835380164526103'; 
 
 const PRIVATE_CATEGORY_ID = '1464990614025408635';
 let voiceTriggerId = '1477572106710679623'; 
@@ -1271,22 +1272,54 @@ client.on(Events.InteractionCreate, async (i) => {
             const roleIdTarget = roleType === 'miner' ? MINER_ROLE_ID : FINKOVOZ_ROLE_ID;
 
             const targetMember = await i.guild.members.fetch(targetId).catch(() => null);
+            const resultChannel = i.guild.channels.cache.get(APPLICATION_RESULT_CHANNEL_ID);
 
             if (action === 'accept') {
                 if (targetMember) {
                     await targetMember.roles.add(roleIdTarget).catch(console.error);
+                    
+                    // Отправка пользователю в ЛС
+                    await targetMember.send(`✅ Ваша заявка на роль **${roleName}** была **одобрена**!`).catch(() => {});
                 }
+                
+                // Сообщение в закрытый канал
+                if (resultChannel) {
+                    const resEmbed = new EmbedBuilder()
+                        .setColor('#00FF00')
+                        .setDescription(`✅ Член семьи <@${targetId}> **ПРИНЯТ** на роль "${roleName}"\nОдобрил: <@${i.user.id}>`)
+                        .setTimestamp();
+                    await resultChannel.send({ embeds: [resEmbed] });
+                }
+
+                // Обновление исходного сообщения (убираем кнопки)
                 const embed = EmbedBuilder.from(i.message.embeds[0])
                     .setColor('#00FF00')
-                    .setDescription(`✅ Член семьи <@${targetId}> **ПРИНЯТ** на роль "${roleName}"\nОдобрил: <@${i.user.id}>`);
+                    .setDescription(`✅ Заявка <@${targetId}> обработана (Принят).`);
                 await i.message.edit({ embeds: [embed], components: [] });
-                await i.reply({ content: `✅ Вы приняли <@${targetId}> на роль ${roleName}.`, flags: [MessageFlags.Ephemeral] });
+                
+                await i.reply({ content: `✅ Вы приняли <@${targetId}> на роль ${roleName}. Сообщение отправлено в закрытый канал и в ЛС.`, flags: [MessageFlags.Ephemeral] });
             } else {
+                if (targetMember) {
+                    // Отправка пользователю в ЛС
+                    await targetMember.send(`❌ К сожалению, ваша заявка на роль **${roleName}** была **отклонена**.`).catch(() => {});
+                }
+
+                // Сообщение в закрытый канал
+                if (resultChannel) {
+                    const resEmbed = new EmbedBuilder()
+                        .setColor('#FF0000')
+                        .setDescription(`❌ Член семьи <@${targetId}> **ОТКЛОНЕН** на роль "${roleName}"\nОтклонил: <@${i.user.id}>`)
+                        .setTimestamp();
+                    await resultChannel.send({ embeds: [resEmbed] });
+                }
+
+                // Обновление исходного сообщения (убираем кнопки)
                 const embed = EmbedBuilder.from(i.message.embeds[0])
                     .setColor('#FF0000')
-                    .setDescription(`❌ Член семьи <@${targetId}> **ОТКЛОНЕН** на роль "${roleName}"\nОтклонил: <@${i.user.id}>`);
+                    .setDescription(`❌ Заявка <@${targetId}> обработана (Отклонен).`);
                 await i.message.edit({ embeds: [embed], components: [] });
-                await i.reply({ content: `❌ Вы отклонили заявку <@${targetId}>.`, flags: [MessageFlags.Ephemeral] });
+                
+                await i.reply({ content: `❌ Вы отклонили заявку <@${targetId}>. Сообщение отправлено в закрытый канал и в ЛС.`, flags: [MessageFlags.Ephemeral] });
             }
             return;
         }
