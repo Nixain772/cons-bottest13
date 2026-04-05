@@ -230,6 +230,7 @@ const APPLICATION_LOG_CHANNEL_ID = '1489976233620930580'; // ID Канала-Ф�
 const APPLICATION_RESULT_CHANNEL_ID = '1489683935293476885'; 
 const MINER_ROLE_ID = '1482734579214450809'; 
 const FINKOVOZ_ROLE_ID = '1489835380164526103'; 
+const PERELETCHIK_ROLE_ID = '1490386943178182806';
 
 const PRIVATE_CATEGORY_ID = '1464990614025408635';
 let voiceTriggerId = '1477572106710679623'; 
@@ -265,7 +266,7 @@ const finkaSchema = new mongoose.Schema({
 
 const blacklistSchema = new mongoose.Schema({
     userId: { type: String, required: true },
-    type: { type: String, enum: ['miner', 'finkovoz'], required: true },
+    type: { type: String, enum: ['miner', 'finkovoz', 'pereletchik'], required: true },
     timestamp: { type: Date, default: Date.now }
 });
 
@@ -604,7 +605,7 @@ client.once(Events.ClientReady, async (c) => {
             .setDescription('Создать сообщение с заявкой в академию'),
         new SlashCommandBuilder()
             .setName('setup_role_apps')
-            .setDescription('Создать сообщение с заявками на Шахтера/Финковоза')
+            .setDescription('Создать сообщение с заявками на Шахтера/Финковоза/Перелетчика')
             .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
         new SlashCommandBuilder()
             .setName('pay_list')
@@ -654,6 +655,7 @@ client.once(Events.ClientReady, async (c) => {
             .setDescription('Управление черным списком заявок')
             .addSubcommand(sub => sub.setName('remove_miner').setDescription('Удалить пользователя из ЧС Шахты').addUserOption(o => o.setName('user').setDescription('Пользователь').setRequired(true)))
             .addSubcommand(sub => sub.setName('remove_finkovoz').setDescription('Удалить пользователя из ЧС Финки').addUserOption(o => o.setName('user').setDescription('Пользователь').setRequired(true)))
+            .addSubcommand(sub => sub.setName('remove_pereletchik').setDescription('Удалить пользователя из ЧС Перелетов').addUserOption(o => o.setName('user').setDescription('Пользователь').setRequired(true)))
             .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     ].map(cmd => cmd.toJSON());
 
@@ -756,7 +758,7 @@ client.on(Events.InteractionCreate, async (i) => {
             await i.deferReply({ flags: [MessageFlags.Ephemeral] });
             
             const nick = i.fields.getTextInputValue('sub_nick');
-            const slots = i.fields.getTextInputValue('sub_slots');
+            const slots = i.fields.getTextInputValue('sub_stats');
             const stats = i.fields.getTextInputValue('sub_stats');
             const missing = i.fields.getTextInputValue('sub_missing');
             const screen = i.fields.getTextInputValue('sub_screen');
@@ -907,6 +909,9 @@ client.on(Events.InteractionCreate, async (i) => {
             } else if (sub === 'remove_finkovoz') {
                 await BlacklistModel.deleteOne({ userId: target.id, type: 'finkovoz' });
                 await i.reply({ content: `✅ Пользователь <@${target.id}> удален из ЧС **Финки**.`, flags: [MessageFlags.Ephemeral] });
+            } else if (sub === 'remove_pereletchik') {
+                await BlacklistModel.deleteOne({ userId: target.id, type: 'pereletchik' });
+                await i.reply({ content: `✅ Пользователь <@${target.id}> удален из ЧС **Перелетов**.`, flags: [MessageFlags.Ephemeral] });
             }
             return;
         }
@@ -1003,7 +1008,7 @@ client.on(Events.InteractionCreate, async (i) => {
                 .setCustomId('app_miner')
                 .setLabel('Роль Шахтера')
                 .setEmoji('<a:cn_pick:1489844630525706390>')
-                .setStyle(ButtonStyle.Primary);
+                .setStyle(ButtonStyle.Danger);
 
             const btnFinkovoz = new ButtonBuilder()
                 .setCustomId('app_finkovoz')
@@ -1011,7 +1016,13 @@ client.on(Events.InteractionCreate, async (i) => {
                 .setEmoji('<a:cn_finka:1489845374985437294>')
                 .setStyle(ButtonStyle.Primary);
 
-            const row = new ActionRowBuilder().addComponents(btnMiner, btnFinkovoz);
+            const btnPereletchik = new ButtonBuilder()
+                .setCustomId('app_pereletchik')
+                .setLabel('Роль Перелётчика')
+                .setEmoji('<:cn_polet:1490388661026422807>')
+                .setStyle(ButtonStyle.Secondary);
+
+            const row = new ActionRowBuilder().addComponents(btnMiner, btnFinkovoz, btnPereletchik);
 
             await i.channel.send({ embeds: [embed], components: [row] });
             await i.reply({ content: '✅ Панель заявок создана.', flags: [MessageFlags.Ephemeral] });
@@ -1272,9 +1283,9 @@ client.on(Events.InteractionCreate, async (i) => {
         }
 
         // --- ЛОГИКА ЗАЯВОК ЧЕРЕЗ ФОРУМ ---
-        if (i.customId === 'app_miner' || i.customId === 'app_finkovoz') {
-            const roleId = i.customId === 'app_miner' ? 'miner' : 'finkovoz';
-            const roleName = i.customId === 'app_miner' ? 'Шахтера' : 'Финковоза';
+        if (i.customId === 'app_miner' || i.customId === 'app_finkovoz' || i.customId === 'app_pereletchik') {
+            const roleId = i.customId === 'app_miner' ? 'miner' : (i.customId === 'app_finkovoz' ? 'finkovoz' : 'pereletchik');
+            const roleName = i.customId === 'app_miner' ? 'Шахтера' : (i.customId === 'app_finkovoz' ? 'Финковоза' : 'Перелетчика');
             
             const isBlacklisted = await BlacklistModel.findOne({ userId: i.user.id, type: roleId });
             if (isBlacklisted) {
@@ -1292,7 +1303,7 @@ client.on(Events.InteractionCreate, async (i) => {
             let pingContent = '';
             if (roleId === 'miner') {
                 pingContent = `<@&${ROLE_NACH_SHAKHTY}>`;
-            } else {
+            } else if (roleId === 'finkovoz') {
                 pingContent = `<@&${ROLE_RUK_FINKI}> <@&${ROLE_ZAM_RUK_FINKI}>`;
             }
 
@@ -1366,7 +1377,7 @@ client.on(Events.InteractionCreate, async (i) => {
             const roleType = parts[4];
             const targetId = parts[5];
 
-            const roleName = roleType === 'miner' ? 'Шахтера' : 'Финковоза';
+            const roleName = roleType === 'miner' ? 'Шахтера' : (roleType === 'finkovoz' ? 'Финковоза' : 'Перелетчика');
             const targetMember = await i.guild.members.fetch(targetId).catch(() => null);
             const resultChannel = i.guild.channels.cache.get(APPLICATION_RESULT_CHANNEL_ID);
 
@@ -1409,8 +1420,8 @@ client.on(Events.InteractionCreate, async (i) => {
             const roleType = parts[2]; 
             const targetId = parts[3];
 
-            const roleName = roleType === 'miner' ? 'Шахтера' : 'Финковоза';
-            const roleIdTarget = roleType === 'miner' ? MINER_ROLE_ID : FINKOVOZ_ROLE_ID;
+            const roleName = roleType === 'miner' ? 'Шахтера' : (roleType === 'finkovoz' ? 'Финковоза' : 'Перелетчика');
+            const roleIdTarget = roleType === 'miner' ? MINER_ROLE_ID : (roleType === 'finkovoz' ? FINKOVOZ_ROLE_ID : PERELETCHIK_ROLE_ID);
 
             const targetMember = await i.guild.members.fetch(targetId).catch(() => null);
             const resultChannel = i.guild.channels.cache.get(APPLICATION_RESULT_CHANNEL_ID);
