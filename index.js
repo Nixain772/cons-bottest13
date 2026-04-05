@@ -1005,14 +1005,14 @@ client.on(Events.InteractionCreate, async (i) => {
         if (i.commandName === 'setup_flights') {
             const embed = new EmbedBuilder()
                 .setTitle('Система перелётов серверов Arizona Online')
-                .setDescription(`<@${i.user.id}> установил новый статус перелётов по серверам.\n\nДействующий статус перелётов: 🟢 Система работает\n\nПри обновлении информации, сообщение будет изменено.`)
+                .setDescription(`<:cn_mod:1490411173462409436> <@${i.user.id}> установил новый статус перелётов по серверам.\n\n<:cn_info:1490410883795521747>Действующий статус перелётов: 🟢 Система **работает**\n\n<:cn_verified:1490412097069121586>При обновлении информации, сообщение будет изменено.`)
                 .setColor('#00FF00');
 
             const btn = new ButtonBuilder()
                 .setCustomId('btn_update_flights')
                 .setLabel('Обновить перелеты')
-                .setStyle(ButtonStyle.Primary)
-                .setEmoji('🔄');
+                .setStyle(ButtonStyle.Secondary)
+                .setEmoji('<:cn_cog:1470525945201823776>');
 
             const row = new ActionRowBuilder().addComponents(btn);
 
