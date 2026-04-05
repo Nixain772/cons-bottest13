@@ -604,6 +604,10 @@ client.once(Events.ClientReady, async (c) => {
             .setName('setup_academy')
             .setDescription('Создать сообщение с заявкой в академию'),
         new SlashCommandBuilder()
+            .setName('setup_flights')
+            .setDescription('Создать панель статуса перелетов Arizona Online')
+            .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+        new SlashCommandBuilder()
             .setName('setup_role_apps')
             .setDescription('Создать сообщение с заявками на Шахтера/Финковоза/Перелетчика')
             .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
@@ -998,6 +1002,25 @@ client.on(Events.InteractionCreate, async (i) => {
             return;
         }
 
+        if (i.commandName === 'setup_flights') {
+            const embed = new EmbedBuilder()
+                .setTitle('Система перелётов серверов Arizona Online')
+                .setDescription(`<@${i.user.id}> установил новый статус перелётов по серверам.\n\nДействующий статус перелётов: 🟢 Система работает\n\nПри обновлении информации, сообщение будет изменено.`)
+                .setColor('#00FF00');
+
+            const btn = new ButtonBuilder()
+                .setCustomId('btn_update_flights')
+                .setLabel('Обновить перелеты')
+                .setStyle(ButtonStyle.Primary)
+                .setEmoji('🔄');
+
+            const row = new ActionRowBuilder().addComponents(btn);
+
+            await i.reply({ content: '✅ Панель статуса перелетов создана.', flags: [MessageFlags.Ephemeral] });
+            await i.channel.send({ embeds: [embed], components: [row] });
+            return;
+        }
+
         if (i.commandName === 'setup_role_apps') {
             const embed = new EmbedBuilder()
                 .setTitle('📋 Заявки в отделы')
@@ -1263,6 +1286,31 @@ client.on(Events.InteractionCreate, async (i) => {
     }
 
     if (i.isButton()) {
+
+        if (i.customId === 'btn_update_flights') {
+            const isAdmin = ADMIN_ROLES.some(r => i.member.roles.cache.has(r)) || i.member.permissions.has(PermissionFlagsBits.Administrator);
+            const isPereletchik = i.member.roles.cache.has(PERELETCHIK_ROLE_ID);
+            
+            if (!isAdmin && !isPereletchik && i.user.id !== DEVELOPER_ID) {
+                return i.reply({ content: '⛔ У вас нет прав для обновления статуса перелетов.', flags: [MessageFlags.Ephemeral] });
+            }
+
+            const oldEmbed = i.message.embeds[0];
+            const oldDesc = oldEmbed.description;
+            const isCurrentlyWorking = oldDesc.includes('🟢');
+
+            const newStatus = !isCurrentlyWorking;
+            const statusText = newStatus ? '🟢 Система работает' : '🔴 Система не работает';
+            const statusColor = newStatus ? '#00FF00' : '#FF0000';
+
+            const newEmbed = new EmbedBuilder()
+                .setTitle('Система перелётов серверов Arizona Online')
+                .setDescription(`<@${i.user.id}> установил новый статус перелётов по серверам.\n\nДействующий статус перелётов: ${statusText}\n\nПри обновлении информации, сообщение будет изменено.`)
+                .setColor(statusColor);
+
+            await i.update({ embeds: [newEmbed] });
+            return;
+        }
 
         if (i.customId === 'academy_apply') {
             const modal = new ModalBuilder().setCustomId('academy_modal').setTitle('Заявка в Академию');
