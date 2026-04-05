@@ -1018,7 +1018,7 @@ client.on(Events.InteractionCreate, async (i) => {
 
             const btnPereletchik = new ButtonBuilder()
                 .setCustomId('app_pereletchik')
-                .setLabel('Роль Перелётчика')
+                .setLabel('Роль Перелетчика')
                 .setEmoji('<:cn_polet:1490388661026422807>')
                 .setStyle(ButtonStyle.Secondary);
 
@@ -1391,7 +1391,7 @@ client.on(Events.InteractionCreate, async (i) => {
 
             if (targetMember) {
                 const blText = isBL ? " Вы также внесены в черный список этого отдела." : "";
-                await targetMember.send(`❌ К сожалению, ваша заявка на роль **${roleName}** была **отклонена**. ${blText}`).catch(() => {});
+                await targetMember.send(`❌ К сожалению, ваша заявка на роль **${roleName}** была **отклонена** проверяющим <@${i.user.id}>.${blText}`).catch(() => {});
             }
 
             if (resultChannel) {
@@ -1403,8 +1403,11 @@ client.on(Events.InteractionCreate, async (i) => {
                 await resultChannel.send({ embeds: [resEmbed] });
             }
 
-            // Закрываем тред на форуме
-            await i.update({ content: '✅ Действие выполнено.', embeds: [], components: [] });
+            const updatedEmbed = EmbedBuilder.from(i.message.embeds[0])
+                .setColor('#FF0000')
+                .addFields({ name: 'Статус', value: `❌ Отклонено проверяющим <@${i.user.id}>${isBL ? ' (С занесением в ЧС)' : ''}` });
+
+            await i.update({ embeds: [updatedEmbed], components: [] });
 
             if (i.channel.isThread()) {
                 await i.channel.setArchived(true, 'Заявка отклонена');
@@ -1428,7 +1431,7 @@ client.on(Events.InteractionCreate, async (i) => {
 
             if (targetMember) {
                 await targetMember.roles.add(roleIdTarget).catch(console.error);
-                await targetMember.send(`✅ Ваша заявка на роль **${roleName}** была **одобрена**!`).catch(() => {});
+                await targetMember.send(`✅ Ваша заявка на роль **${roleName}** была **одобрена** проверяющим <@${i.user.id}>!`).catch(() => {});
             }
             
             if (resultChannel) {
@@ -1439,7 +1442,11 @@ client.on(Events.InteractionCreate, async (i) => {
                 await resultChannel.send({ embeds: [resEmbed] });
             }
 
-            await i.reply({ content: `✅ Вы приняли <@${targetId}> на роль ${roleName}.`, flags: [MessageFlags.Ephemeral] });
+            const updatedEmbed = EmbedBuilder.from(i.message.embeds[0])
+                .setColor('#00FF00')
+                .addFields({ name: 'Статус', value: `✅ Одобрено проверяющим <@${i.user.id}>` });
+
+            await i.update({ embeds: [updatedEmbed], components: [] });
 
             if (i.channel.isThread()) {
                 await i.channel.setArchived(true, 'Заявка принята');
