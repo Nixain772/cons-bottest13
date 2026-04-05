@@ -1023,7 +1023,7 @@ client.on(Events.InteractionCreate, async (i) => {
 
         if (i.commandName === 'setup_role_apps') {
             const embed = new EmbedBuilder()
-                .setTitle('📋 Заявки в отделы')
+                .setTitle('📋 ** —  Заявление на вступление**')
                 .setDescription('Нажмите на нужную кнопку ниже, чтобы подать заявку в соответствующий отдел.')
                 .setColor('#2F3136');
 
