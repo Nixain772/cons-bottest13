@@ -937,7 +937,6 @@ client.on(Events.InteractionCreate, async (i) => {
             });
             
             const embedFinka = new EmbedBuilder()
-                .setTitle('💰 Схема вывоза финки')
                 .setImage('https://media.discordapp.net/attachments/1096080921427443835/1330983195244564500/image.png?ex=678fe04a&is=678e8eca&hm=f24f57545939223126f5d817f735d1f86877028710b71940da7c48f21789c622&=&format=webp&quality=lossless&width=961&height=671')
                 .setColor('#2F3136');
             await i.channel.send({ embeds: [embedFinka] }).catch(console.error);
