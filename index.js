@@ -208,10 +208,10 @@ http.createServer((req, res) => {
 
 /**
  * ==============================================================================
- * 2. КОНФИГУРАЦИЯ (ID КАНАЛОВ И РОЛЕЙ)
+ * 2. КОНФИГУРАЦИЯ (ID КАНАЛОВ И РОЛЕЙ) 1358552731257667705
  * ==============================================================================
  */
-const ALLOWED_GUILDS = ['1465230913473478710', '1096080921427443832']; 
+const ALLOWED_GUILDS = ['1465230913473478710', '1358552731257667705', '1096080921427443832']; 
 const AUTO_ROLE_ID = '1391087961088721047'; 
 const MAIN_CHANNEL_ID = '1426174226464899163'; 
 const MENTION_ROLE_ID = '1426222945705001262'; 
@@ -221,16 +221,16 @@ const LOG_RECIPIENT_ID = '915665525634375710';
 const FKICK_LOG_CHANNEL_ID = '1475480065578897550'; 
 
 // --- РОЛИ ДЛЯ ПИНГА В ЗАЯВКАХ ---
-const ROLE_NACH_SHAKHTY = '1489976721800167424'; 
-const ROLE_RUK_FINKI = '1489976613738385625'; 
-const ROLE_ZAM_RUK_FINKI = '1489976691999903845'; 
+const ROLE_NACH_SHAKHTY = '1426222521283510373'; 
+const ROLE_RUK_FINKI = '1476427128462512229'; 
+const ROLE_ZAM_RUK_FINKI = '1485358656131301537'; 
 
 // --- КАНАЛЫ ЗАЯВОК ---
-const APPLICATION_LOG_CHANNEL_ID = '1489976233620930580'; // ID Канала-Форума
+const APPLICATION_LOG_CHANNEL_ID = '1490423161819500614'; // ID Канала-Форума
 const APPLICATION_RESULT_CHANNEL_ID = '1489683935293476885'; 
-const MINER_ROLE_ID = '1482734579214450809'; 
-const FINKOVOZ_ROLE_ID = '1489835380164526103'; 
-const PERELETCHIK_ROLE_ID = '1490386943178182806';
+const MINER_ROLE_ID = '1426222945705001262'; 
+const FINKOVOZ_ROLE_ID = '1476426854482317332'; 
+const PERELETCHIK_ROLE_ID = '1441433042869817477';
 
 const PRIVATE_CATEGORY_ID = '1464990614025408635';
 let voiceTriggerId = '1477572106710679623'; 
@@ -238,13 +238,13 @@ let voiceTriggerId = '1477572106710679623';
 const ADMIN_ROLES = [
     '1439024334491357325', '1096373072887566348', 
     '1426186403758215240', '1392634969225957500', 
-    '1426222521283510373'
+    '1426222521283510373', '1485358656131301537'
 ]; 
 
 const DEVELOPER_ID = '915665525634375710'; 
 
-const TARGET_HOUR = 16;    
-const TARGET_MINUTE = 37;  
+const TARGET_HOUR = 20;    
+const TARGET_MINUTE = 10;  
 const UTC_OFFSET = 3;     
 
 const FINKA_TARGET_HOUR = 23;    
@@ -261,7 +261,8 @@ const FINKA_CHART_CHANNEL_ID = '1476625883744702694';
 const finkaSchema = new mongoose.Schema({
     configId: { type: String, default: 'global' },
     lastPayMessageId: String,
-    lastPicMessageId: String
+    lastPicMessageId: String,
+    flightStatus: { type: Boolean, default: true }
 });
 
 const blacklistSchema = new mongoose.Schema({
@@ -278,6 +279,7 @@ const BlacklistModel = mongoose.model('AppBlacklist', blacklistSchema);
 
 let lastPayMessageId = null;
 let lastPicMessageId = null; 
+let globalFlightStatus = true;
 
 async function loadFinkaData() {
     try {
@@ -287,6 +289,7 @@ async function loadFinkaData() {
         }
         lastPayMessageId = data.lastPayMessageId;
         lastPicMessageId = data.lastPicMessageId;
+        if (data.flightStatus !== undefined) globalFlightStatus = data.flightStatus;
         console.log(`✅ Данные загружены из MongoDB.`);
     } catch (e) {
         console.error("❌ Ошибка загрузки данных:", e);
@@ -297,7 +300,7 @@ async function saveFinkaData() {
     try {
         await FinkaModel.updateOne(
             { configId: 'global' },
-            { lastPayMessageId, lastPicMessageId },
+            { lastPayMessageId, lastPicMessageId, flightStatus: globalFlightStatus },
             { upsert: true }
         );
         console.log("💾 Данные сохранены в MongoDB");
@@ -438,7 +441,7 @@ client.on(Events.MessageCreate, async (message) => {
         if (command === 'info') {
             const embed = new EmbedBuilder()
                 .setColor('#FF69B4') 
-                .setDescription('# **⛏️ Информация для новых шахтеров:**\n\n**💎 [Самый правый, 0 отсек]** - называется "Алмазка" \n**🪲 [По прямой, 3 отсек]** - называется "Клоповник"\n**👥 [По прямой-вправо, 2-4 отсеки]** называются "Двойным отсеком"\n-# Изображено на карте (расположение и названия каждого из отсеков)\n\n# **🔖 Некие условия, для входа на шахту**\n\n1. **Ходить всегда with сетом,  со своим или арендованным.** _Чтобы максимально фармить берите "Майн-скелет" + Охранника +11-22% к x2 ресам_\n2. **У нас есть своеобразная комка с ресурсов для расходов фаме "15кк" - каждая шахта,** _если не оплатишь то __x2 будешь отдавать__! (оплата на банк семьи [/fammenu])_\n3. **Каждый день, после шахты, в 20:10 в канале "Пикалка" будет открываться пикалка на шахту.** _Если словил - __идешь__, если НЕ словил - __не идешь___\n**Ресы у друг - друга не пиздим,** _если что-то не поделили - отписывайте руководству семьи_\n4. **Если надо будет деффать шахту, залетаете без всяких нюней.** _Если не можете - __отписывайте___\n\n5. Если банит **айпи** пишем админам, чтобы они разбанили айпи!\nЕсли из __УКР__ и нету доступа в VK пишите мне(<@937400997452591165>), буду туда им писать (от вас: сказать кому писать, ваш айпи)');
+                .setDescription('# **⛏️ Информация для новых шахтеров:**\n\n**💎 [Самый правый, 0 отсек]** - называется "Алмазка" \n**🪲 [По прямой, 3 отсек]** - называется "Клоповник"\n**👥 [По прямой-вправо, 2-4 отсеки]** называются "Двойным отсеком"\n-# Изображено на карте (расположение и названия каждого из отсеков)\n\n# **🔖 Некие условия, для входа на шахту**\n\n1. **Ходить всегда with сетом,  со своим или арендованным.** _Чтобы максимально фармить берите "Майн-скелет" + Охранника +11-22% к x2 ресам_\n2. **У нас есть своеобразная комка с ресурсов для расходов фаме "15кк" - каждая шахта,** _если не оплатишь то __x2 будешь отдавать__! (оплата на банк семьи [/fammenu])_\n3. **Каждый день, после шахты, в 20:10 в канале "Пикалка"дить всегда with сетом,  со своим или арендованным.** _Чтобы максимально фармить берите "Майн-скелет" + Охранника +11-22% к x2 ресам_\n2. **У нас есть своеобразная комка с ресурсов для расходов фаме "15кк" - каждая шахта,** _если не оплатишь то __x2 будешь отдавать__! (оплата на банк семьи [/fammenu])_\n3. **Каждый день, после шахты, в 20:10 в канале "Пикалка" будет открываться пикалка на шахту.** _Если словил - __идешь__, если НЕ словил - __не идешь___\n**Ресы у друг - друга не пиздим,** _если что-то не поделили - отписывайте руководству семьи_\n4. **Если надо будет деффать шахту, залетаете без всяких нюней.** _Если не можете - __отписывайте___\n\n5. Если банит **айпи** пишем админам, чтобы они разбанили айпи!\nЕсли из __УКР__ и нету доступа в VK пишите мне(<@937400997452591165>), буду туда им писать (от вас: сказать кому писать, ваш айпи)');
             
             await message.channel.send({ embeds: [embed] });
             await message.delete().catch(() => {});
@@ -608,6 +611,9 @@ client.once(Events.ClientReady, async (c) => {
             .setDescription('Создать панель статуса перелетов Arizona Online')
             .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
         new SlashCommandBuilder()
+            .setName('flights')
+            .setDescription('Проверить текущий статус перелетов'),
+        new SlashCommandBuilder()
             .setName('setup_role_apps')
             .setDescription('Создать сообщение с заявками на Шахтера/Финковоза/Перелетчика')
             .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
@@ -660,6 +666,10 @@ client.once(Events.ClientReady, async (c) => {
             .addSubcommand(sub => sub.setName('remove_miner').setDescription('Удалить пользователя из ЧС Шахты').addUserOption(o => o.setName('user').setDescription('Пользователь').setRequired(true)))
             .addSubcommand(sub => sub.setName('remove_finkovoz').setDescription('Удалить пользователя из ЧС Финки').addUserOption(o => o.setName('user').setDescription('Пользователь').setRequired(true)))
             .addSubcommand(sub => sub.setName('remove_pereletchik').setDescription('Удалить пользователя из ЧС Перелетов').addUserOption(o => o.setName('user').setDescription('Пользователь').setRequired(true)))
+            .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+        new SlashCommandBuilder()
+            .setName('test_picks')
+            .setDescription('Активировать пикалку на шахту и финку одновременно (для тестов)')
             .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     ].map(cmd => cmd.toJSON());
 
@@ -706,7 +716,7 @@ client.once(Events.ClientReady, async (c) => {
 
     const statuses = [
         { name: 'consequence fam', type: ActivityType.Playing },
-        { name: 'consequence fam', type: ActivityType.Listening }
+        { name: '/flights - Статус перелетов', type: ActivityType.Listening }
     ];
     let si = 0;
     setInterval(() => {
@@ -898,9 +908,46 @@ client.on(Events.InteractionCreate, async (i) => {
     }
 
     if (i.isChatInputCommand()) {
+
+        // Проверка для всех: Команда flights доступна любому пользователю
+        if (i.commandName === 'flights') {
+            const statusText = globalFlightStatus ? '🟢 Перелеты **РАБОТАЮТ**' : '🔴 Перелеты **НЕ РАБОТАЮТ**';
+            await i.reply({ content: statusText, flags: [MessageFlags.Ephemeral] });
+            return;
+        }
+
         const isAdmin = ADMIN_ROLES.some(r => i.member.roles.cache.has(r)) || i.member.permissions.has(PermissionFlagsBits.Administrator);
+        
         if (!isAdmin && i.user.id !== DEVELOPER_ID) {
             return i.reply({ content: '⛔ У вас нет доступа к этой команде.', flags: [MessageFlags.Ephemeral] });
+        }
+
+        if (i.commandName === 'test_picks') {
+            await i.deferReply({ flags: [MessageFlags.Ephemeral] });
+            
+            // Пикалка на шахту
+            const msgMine = await i.channel.send({ 
+                content: `<@&${MENTION_ROLE_ID}>`, 
+                ...createPickEmbed(0, [], 6, undefined, 'Пик слота') 
+            });
+            
+            // Пикалка на финку
+            const msgFinka = await i.channel.send({ 
+                content: `<@&${FINKA_MENTION_ROLE_ID}>`, 
+                ...createPickEmbed(0, [], 3, '# 💰 **Сбор на финку**\n\nОткрылась пикалка на вывоз территорий.', 'Занять слот', '💰') 
+            });
+            
+            const embedFinka = new EmbedBuilder()
+                .setTitle('💰 Схема вывоза финки')
+                .setImage('https://media.discordapp.net/attachments/1096080921427443835/1330983195244564500/image.png?ex=678fe04a&is=678e8eca&hm=f24f57545939223126f5d817f735d1f86877028710b71940da7c48f21789c622&=&format=webp&quality=lossless&width=961&height=671')
+                .setColor('#2F3136');
+            await i.channel.send({ embeds: [embedFinka] }).catch(console.error);
+
+            lastPicMessageId = msgFinka.id;
+            await saveFinkaData();
+
+            await i.editReply({ content: '✅ Тестовые пикалки успешно запущены в этом канале.' });
+            return;
         }
 
         if (i.commandName === 'app_blacklist') {
@@ -1003,6 +1050,8 @@ client.on(Events.InteractionCreate, async (i) => {
         }
 
         if (i.commandName === 'setup_flights') {
+            globalFlightStatus = true; // Сброс статуса при создании панели
+            await saveFinkaData();
             const embed = new EmbedBuilder()
                 .setTitle('Система перелётов серверов Arizona Online')
                 .setDescription(`<:cn_mod:1490411173462409436> <@${i.user.id}> установил новый статус перелётов по серверам.\n\n<:cn_info:1490410883795521747> Действующий статус перелётов: 🟢 Система **работает**\n\n<:cn_verified:1490412097069121586> При обновлении информации, сообщение будет изменено.`)
@@ -1288,10 +1337,10 @@ client.on(Events.InteractionCreate, async (i) => {
     if (i.isButton()) {
 
         if (i.customId === 'btn_update_flights') {
-            const isAdmin = ADMIN_ROLES.some(r => i.member.roles.cache.has(r)) || i.member.permissions.has(PermissionFlagsBits.Administrator);
-            const isPereletchik = i.member.roles.cache.has(PERELETCHIK_ROLE_ID);
-            
-            if (!isAdmin && !isPereletchik && i.user.id !== DEVELOPER_ID) {
+            const allowedRoles = ['1426186403758215240', '1392634969225957500', '1426222521283510373', '1096373072887566348'];
+            const hasAccess = allowedRoles.some(r => i.member.roles.cache.has(r)) || i.member.permissions.has(PermissionFlagsBits.Administrator) || i.user.id === DEVELOPER_ID;
+
+            if (!hasAccess) {
                 return i.reply({ content: '⛔ У вас нет прав для обновления статуса перелетов.', flags: [MessageFlags.Ephemeral] });
             }
 
@@ -1300,6 +1349,9 @@ client.on(Events.InteractionCreate, async (i) => {
             const isCurrentlyWorking = oldDesc.includes('🟢');
 
             const newStatus = !isCurrentlyWorking;
+            globalFlightStatus = newStatus; // Синхронизируем статус для команды
+            await saveFinkaData();
+
             const statusText = newStatus ? '🟢 Система работает' : '🔴 Система не работает';
             const statusColor = newStatus ? '#00FF00' : '#FF0000';
 
@@ -1626,6 +1678,23 @@ client.on(Events.InteractionCreate, async (i) => {
                     return i.reply({ content: 'Вы уже записаны!', flags: [MessageFlags.Ephemeral] });
                 }
 
+                // Прямая запись для Финки (без меню)
+                if (embed.description && embed.description.includes('финку')) {
+                    const freeIndex = users.findIndex(u => u === 'Свободно');
+                    if (freeIndex === -1) {
+                        return i.reply({ content: '❌ Мест больше нет!', flags: [MessageFlags.Ephemeral] });
+                    }
+                    
+                    users[freeIndex] = `<@${i.user.id}>`;
+                    const usersCount = users.filter(u => u !== 'Свободно').length;
+                    const newData = createPickEmbed(usersCount, users, maxSlots, embed.description, 'Занять слот', '💰');
+                    
+                    await msg.edit(newData);
+                    await i.reply({ content: `✅ Вы успешно заняли слот #${freeIndex + 1}!`, flags: [MessageFlags.Ephemeral] });
+                    return;
+                }
+
+                // Выпадающее меню для Шахты
                 const select = new StringSelectMenuBuilder()
                     .setCustomId(`sel_pick_${maxSlots}_${msg.id}`)
                     .setPlaceholder(`Выберите точку (1-${maxSlots})`);
